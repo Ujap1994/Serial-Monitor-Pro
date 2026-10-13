@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-linux:
+    name: Check · Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install xvfb (end-to-end tests) and socat (virtual serial port)
+        run: sudo apt-get update && sudo apt-get install -y xvfb socat
+      - run: npm ci
+      - name: npm run check (format, lint, types, unit, build, end-to-end)
+        run: npm run check
+        env:
+          CI: 'true'
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-linux
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  # Windows and macOS minutes are expensive on private repositories – these
+  # run for pull requests, on main and on demand.
+  check-desktop:
+    name: Check · ${{ matrix.name }}
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+        env:
+          CI: 'true'
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.name }}
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7

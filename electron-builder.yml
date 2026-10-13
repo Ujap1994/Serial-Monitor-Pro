@@ -1,0 +1,110 @@
+# Packaging for Windows, macOS and Linux (x64 + arm64).
+# Documentation: https://www.electron.build/configuration
+#
+# Local builds:  npm run dist:linux | dist:win | dist:mac
+# Releases are built by .github/workflows/release.yml.
+
+appId: io.github.ujap1994.SerialMonitorPro
+productName: Serial Monitor Pro
+copyright: Copyright © 2025–2026 PW SoHa-Solutions
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - resources/**
+  - package.json
+  - '!**/*.map'
+asarUnpack:
+  - resources/**
+# serialport ships N-API prebuilds for every target – no rebuild needed.
+npmRebuild: false
+electronLanguages: [en-US, de]
+# File names, e.g. SerialMonitorPro-1.0.0-linux-x86_64.AppImage. The ${arch}
+# placeholder follows each format's convention (deb: amd64, rpm: x86_64 …).
+artifactName: SerialMonitorPro-${version}-${os}-${arch}.${ext}
+
+# ── Windows ──────────────────────────────────────────────────────────────────
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Serial Monitor Pro
+  license: LICENSE
+  deleteAppDataOnUninstall: false
+  artifactName: SerialMonitorPro-${version}-windows-${arch}-setup.${ext}
+portable:
+  artifactName: SerialMonitorPro-${version}-windows-${arch}-portable.${ext}
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+mac:
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # No paid Apple certificate: ad-hoc signature, which Apple Silicon requires.
+  identity: '-'
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  notarize: false
+  artifactName: SerialMonitorPro-${version}-macos-${arch}.${ext}
+dmg:
+  title: Serial Monitor Pro ${version}
+
+# ── Linux ────────────────────────────────────────────────────────────────────
+linux:
+  icon: build/icons
+  category: Development
+  executableName: serial-monitor-pro
+  maintainer: PW SoHa-Solutions <info@pwsohasolutions.com>
+  vendor: PW SoHa-Solutions
+  synopsis: Modern serial terminal for development, service and test engineering
+  description: >-
+    Serial Monitor Pro is a serial terminal with hex dump, protocol decoders
+    (Modbus RTU, NMEA 0183), a frame parser with checksum verification, CRC
+    tools, live graphs, automation, stop conditions and multi-port monitoring.
+  desktop:
+    entry:
+      Name: Serial Monitor Pro
+      GenericName: Serial Terminal
+      Comment: Serial terminal for development, service and test engineering
+      Keywords: serial;uart;rs232;rs485;terminal;tty;com;modbus;nmea;arduino;esp32;
+      StartupWMClass: Serial Monitor Pro
+  target:
+    - AppImage
+    - deb
+    - rpm
+    - pacman
+    - tar.gz
+deb:
+  # Serial ports belong to the "dialout" group – see the README.
+  packageCategory: devel
+rpm:
+  fpm: ['--rpm-rpmbuild-define', '_build_id_links none']
+flatpak:
+  runtime: org.freedesktop.Platform
+  runtimeVersion: '25.08'
+  sdk: org.freedesktop.Sdk
+  base: org.electronjs.Electron2.BaseApp
+  baseVersion: '25.08'
+  artifactName: SerialMonitorPro-${version}-linux-${arch}.${ext}
+  finishArgs:
+    - --share=ipc
+    - --share=network
+    - --socket=x11
+    - --socket=wayland
+    - --device=all
+    - --filesystem=home
+    - --talk-name=org.freedesktop.Notifications
+
+publish: null

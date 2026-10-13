@@ -1,0 +1,12 @@
+# Keep line endings consistent across Windows, macOS and Linux.
+* text=auto eol=lf
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+*.png  binary
+*.ico  binary
+*.icns binary
+*.jpg  binary
+*.webp binary
+*.gif  binary

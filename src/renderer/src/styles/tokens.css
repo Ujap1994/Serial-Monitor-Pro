@@ -1,0 +1,112 @@
+/*
+ * Design tokens. The light palette follows the original PySide6 version
+ * (slate text, blue for connecting, green for sending, red for stopping);
+ * the dark palette mirrors it for dimly lit labs.
+ */
+:root {
+  color-scheme: light;
+
+  --font-ui:
+    'Inter', 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+    'Cantarell', 'Ubuntu', 'Noto Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas,
+    'DejaVu Sans Mono', 'Liberation Mono', monospace;
+
+  --bg: #f1f4f8;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #eef2f7;
+  --surface-hover: #f1f5f9;
+  --border: #dde3eb;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-2: #334155;
+  --muted: #64748b;
+  --faint: #94a3b8;
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-soft: #dbeafe;
+  --primary-text: #1d4ed8;
+  --success: #059669;
+  --success-hover: #047857;
+  --success-soft: #d1fae5;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-soft: #fee2e2;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --violet: #7c3aed;
+  --violet-hover: #6d28d9;
+
+  --monitor-bg: #fbfcfe;
+  --monitor-fg: #1e293b;
+  --monitor-line: #cbd5e1;
+  --monitor-ts: #94a3b8;
+  --monitor-tx: #1d4ed8;
+  --monitor-sys: #b45309;
+  --monitor-err: #dc2626;
+  --monitor-ok: #059669;
+  --mark-bg: #fde68a;
+  --mark-fg: #422006;
+
+  --focus-ring: 0 0 0 3px rgb(37 99 235 / 0.28);
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 14px rgb(15 23 42 / 0.08), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 20px 50px rgb(15 23 42 / 0.22), 0 4px 12px rgb(15 23 42 / 0.1);
+
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  --control-h: 32px;
+  --mono-size: 13px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0a101e;
+  --surface: #111a2d;
+  --surface-2: #0e1627;
+  --surface-3: #18233a;
+  --surface-hover: #1b2741;
+  --border: #223150;
+  --border-strong: #2e4066;
+  --text: #e5ebf5;
+  --text-2: #c3cede;
+  --muted: #8a9ab5;
+  --faint: #5d6d8a;
+
+  --primary: #3b82f6;
+  --primary-hover: #2f6fe0;
+  --primary-soft: rgb(59 130 246 / 0.18);
+  --primary-text: #93c5fd;
+  --success: #10b981;
+  --success-hover: #0e9f6e;
+  --success-soft: rgb(16 185 129 / 0.16);
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-soft: rgb(239 68 68 / 0.16);
+  --warning: #f59e0b;
+  --warning-soft: rgb(245 158 11 / 0.16);
+  --violet: #8b5cf6;
+  --violet-hover: #7c3aed;
+
+  --monitor-bg: #0a1121;
+  --monitor-fg: #dfe7f3;
+  --monitor-line: #223150;
+  --monitor-ts: #5f7090;
+  --monitor-tx: #7fb4ff;
+  --monitor-sys: #fbbf24;
+  --monitor-err: #f87171;
+  --monitor-ok: #34d399;
+  --mark-bg: #a16207;
+  --mark-fg: #fffbeb;
+
+  --focus-ring: 0 0 0 3px rgb(96 165 250 / 0.35);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 4px 14px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 24px 60px rgb(0 0 0 / 0.55), 0 4px 12px rgb(0 0 0 / 0.35);
+}

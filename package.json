@@ -1,0 +1,108 @@
+{
+  "name": "serial-monitor-pro",
+  "productName": "Serial Monitor Pro",
+  "version": "1.0.0",
+  "description": "A modern serial terminal for development, service and test engineering – hex dump, protocol decoders, frame parser, live graphs, automation and multi-port monitoring.",
+  "keywords": [
+    "serial",
+    "uart",
+    "rs232",
+    "rs485",
+    "terminal",
+    "serial-monitor",
+    "modbus",
+    "nmea",
+    "crc",
+    "electron"
+  ],
+  "homepage": "https://github.com/Ujap1994/Serial-Monitor-Pro",
+  "bugs": {
+    "url": "https://github.com/Ujap1994/Serial-Monitor-Pro/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ujap1994/Serial-Monitor-Pro.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "PW SoHa-Solutions",
+    "email": "info@pwsohasolutions.com",
+    "url": "https://github.com/Ujap1994"
+  },
+  "main": "./out/main/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:sim": "electron-vite dev -- --simulator",
+    "start": "electron-vite preview",
+    "build": "electron-vite build",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "lint": "eslint --max-warnings=0 .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:only": "playwright test",
+    "test:hardware": "node scripts/hardware-test.mjs",
+    "check": "node scripts/check.mjs",
+    "check:quick": "node scripts/check.mjs --quick",
+    "check:watch": "concurrently -k -n types,unit -c blue,green \"tsc -p tsconfig.web.json --noEmit --watch --preserveWatchOutput\" \"vitest\"",
+    "icons": "node scripts/generate-icons.mjs",
+    "docs:screenshots": "npm run build && node scripts/screenshots.mjs",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "prepare": "simple-git-hooks"
+  },
+  "dependencies": {
+    "serialport": "^13.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "concurrently": "^10.0.6",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "lint-staged": "^17.6.0",
+    "lucide-react": "^1.56.0",
+    "prettier": "^3.9.10",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "simple-git-hooks": "^2.14.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^7.3.7",
+    "vitest": "^4.1.11"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged",
+    "pre-push": "npm run check:quick"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mjs,js}": [
+      "prettier --write",
+      "eslint --max-warnings=0 --no-warn-ignored"
+    ],
+    "*.{json,md,yml,yaml,css,html}": [
+      "prettier --write"
+    ]
+  }
+}

@@ -1,0 +1,209 @@
+name: Release
+
+# Push a tag such as v1.0.0 to build every package and publish a GitHub
+# release. "Run workflow" (manual) builds all packages as downloadable
+# artifacts without publishing – handy for testing.
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a GitHub release (tag v<version from package.json>)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  # No paid code-signing certificates – see the README for what that means.
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - id: version
+        name: Read version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Tag must match package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "v${{ steps.version.outputs.version }}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
+      - run: sudo apt-get update && sudo apt-get install -y xvfb socat
+      - run: npm ci
+      - run: npm run check
+        env:
+          CI: 'true'
+
+  linux:
+    name: Linux ${{ matrix.arch }} (AppImage, deb, rpm, pacman, tar.gz)
+    needs: verify
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y rpm libarchive-tools xvfb socat
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --linux AppImage deb rpm pacman tar.gz --${{ matrix.arch }} --publish never
+      - name: Test the packaged application
+        if: matrix.arch == 'x64'
+        run: xvfb-run -a npx playwright test
+        env:
+          CI: 'true'
+          SMP_APP_EXECUTABLE: ${{ github.workspace }}/release/linux-unpacked/serial-monitor-pro
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.pacman
+            release/*.tar.gz
+          if-no-files-found: error
+
+  flatpak:
+    name: Flatpak ${{ matrix.arch }}
+    needs: verify
+    # Native arm64 runners are free for public repositories; private ones
+    # build arm64 under QEMU emulation instead.
+    runs-on: ${{ (matrix.arch == 'arm64' && !github.event.repository.private) && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: QEMU for cross-building
+        if: matrix.arch == 'arm64' && runner.arch != 'ARM64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Install flatpak-builder and the Flathub remote
+        run: |
+          sudo apt-get update && sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+      - name: Pick the newest available runtime
+        id: runtime
+        run: |
+          ARCH=$([ "${{ matrix.arch }}" = arm64 ] && echo aarch64 || echo x86_64)
+          for v in 25.08 24.08; do
+            if flatpak remote-info --user flathub "runtime/org.electronjs.Electron2.BaseApp/$ARCH/$v" > /dev/null 2>&1; then
+              echo "version=$v" >> "$GITHUB_OUTPUT"; echo "Using runtime $v"; exit 0
+            fi
+          done
+          echo "::error::No Electron BaseApp runtime found"; exit 1
+      - run: npm ci
+      - run: npm run build
+      - run: >-
+          npx electron-builder --linux flatpak --${{ matrix.arch }} --publish never
+          -c.flatpak.runtimeVersion=${{ steps.runtime.outputs.version }}
+          -c.flatpak.baseVersion=${{ steps.runtime.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-${{ matrix.arch }}
+          path: release/*.flatpak
+          if-no-files-found: error
+
+  windows:
+    name: Windows (x64 + arm64)
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --win nsis portable --x64 --publish never
+      - name: Test the packaged application
+        run: npx playwright test
+        env:
+          CI: 'true'
+          SMP_APP_EXECUTABLE: ${{ github.workspace }}\release\win-unpacked\Serial Monitor Pro.exe
+      - run: npx electron-builder --win nsis portable --arm64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: release/*.exe
+          if-no-files-found: error
+
+  macos:
+    name: macOS (Apple Silicon + Intel)
+    needs: verify
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --mac dmg zip --arm64 --publish never
+      - name: Test the packaged application (Apple Silicon)
+        run: npx playwright test
+        env:
+          CI: 'true'
+          SMP_APP_EXECUTABLE: ${{ github.workspace }}/release/mac-arm64/Serial Monitor Pro.app/Contents/MacOS/Serial Monitor Pro
+      - run: npx electron-builder --mac dmg zip --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [verify, linux, flatpak, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Release notes
+        run: node scripts/release-notes.mjs "${{ needs.verify.outputs.version }}" dist > release-notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.verify.outputs.version }}
+          name: Serial Monitor Pro ${{ needs.verify.outputs.version }}
+          body_path: release-notes.md
+          files: dist/*
+          fail_on_unmatched_files: true

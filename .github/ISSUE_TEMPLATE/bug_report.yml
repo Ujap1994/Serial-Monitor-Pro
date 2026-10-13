@@ -1,0 +1,46 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Help → About shows it.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        [
+          Windows,
+          macOS,
+          Linux (deb),
+          Linux (rpm),
+          Linux (pacman),
+          Linux (Flatpak),
+          Linux (AppImage),
+          other,
+        ]
+    validations:
+      required: true
+  - type: input
+    id: adapter
+    attributes:
+      label: Serial adapter / device
+      placeholder: e.g. CH340 at 115200 baud, Arduino Uno, ESP32
+  - type: textarea
+    id: logs
+    attributes:
+      label: Monitor output or screenshots
+      render: text
