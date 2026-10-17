@@ -42,6 +42,15 @@ describe('findFrames', () => {
     expect(frames).toHaveLength(2);
   });
 
+  it('never returns bytes of a recognised telegram as remainder', () => {
+    // Formerly the rest was "01 02": the 01 was handed out twice, and in front of
+    // the next chunk it could even complete a false header.
+    const spec = frameSpec({ header: bytes(0xaa, 0xbb, 0xcc), fixedLength: 4 });
+    const { frames, rest } = findFrames(bytes(0xaa, 0xbb, 0xcc, 0x01, 0x02), spec);
+    expect(frames.map((f) => Array.from(f.raw))).toEqual([[0xaa, 0xbb, 0xcc, 0x01]]);
+    expect(Array.from(rest)).toEqual([0x02]);
+  });
+
   it('reports a wrong checksum', () => {
     const bad = telegram.slice();
     bad[bad.length - 1] = (bad[bad.length - 1] ?? 0) ^ 0xff;

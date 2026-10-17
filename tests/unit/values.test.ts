@@ -34,4 +34,8 @@ describe('extractValues', () => {
   it('accepts exponents and signs', () => {
     expect(extractValues('x:-1.5e3')).toEqual({ x: -1500 });
   });
+  it('ignores numbers beyond the floating-point range instead of plotting Infinity', () => {
+    expect(extractValues('a:1e999, b:2')).toEqual({ b: 2 });
+    expect(extractValues('-1e400;5', 'separated', ';')).toEqual({ 'Wert 2': 5 });
+  });
 });

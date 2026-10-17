@@ -8,7 +8,10 @@ const NUMBER = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 function toNumber(text: string): number | null {
   const s = text.trim().replace(',', '.');
-  return NUMBER.test(s) ? Number(s) : null;
+  if (!NUMBER.test(s)) return null;
+  // "1e999" matches the pattern but would put Infinity into the graph.
+  const value = Number(s);
+  return Number.isFinite(value) ? value : null;
 }
 
 /**

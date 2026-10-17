@@ -74,8 +74,9 @@ export function findFrames(
     if (spec.header.length) {
       start = indexOfBytes(data, spec.header, pos);
       if (start < 0) {
-        // No header left: keep only a possible partial header at the end.
-        const keep = Math.max(0, data.length - (spec.header.length - 1));
+        // No header left: keep only a possible partial header at the end –
+        // but never bytes of a telegram that has already been returned.
+        const keep = Math.max(pos, data.length - (spec.header.length - 1));
         return { frames, rest: data.slice(keep) };
       }
       bodyStart = start + spec.header.length;
