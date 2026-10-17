@@ -114,11 +114,17 @@ jobs:
         id: runtime
         run: |
           ARCH=$([ "${{ matrix.arch }}" = arm64 ] && echo aarch64 || echo x86_64)
+          has() { flatpak remote-info --user flathub "$1" > /dev/null 2>&1; }
           for v in 25.08 24.08; do
-            if flatpak remote-info --user flathub "runtime/org.electronjs.Electron2.BaseApp/$ARCH/$v" > /dev/null 2>&1; then
+            # Flathub publishes the Electron BaseApp as an app, the platform as a runtime.
+            if { has "app/org.electronjs.Electron2.BaseApp/$ARCH/$v" || has "runtime/org.electronjs.Electron2.BaseApp/$ARCH/$v"; } &&
+              has "runtime/org.freedesktop.Platform/$ARCH/$v"; then
               echo "version=$v" >> "$GITHUB_OUTPUT"; echo "Using runtime $v"; exit 0
             fi
           done
+          echo "Available on Flathub:"
+          flatpak remote-ls --user --all --arch="$ARCH" --columns=ref flathub |
+            grep -E 'Electron2\.BaseApp/|org\.freedesktop\.Platform/' || true
           echo "::error::No Electron BaseApp runtime found"; exit 1
       - run: npm ci
       - run: npm run build
