@@ -103,7 +103,7 @@ jobs:
           cache: npm
       - name: QEMU for cross-building
         if: matrix.arch == 'arm64' && runner.arch != 'ARM64'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
       - name: Install flatpak-builder and the Flathub remote
