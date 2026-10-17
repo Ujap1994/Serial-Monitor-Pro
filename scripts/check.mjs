@@ -49,7 +49,10 @@ const steps = [
   { name: 'Types (main)', cmd: [npx, 'tsc', '-p', 'tsconfig.node.json', '--noEmit'] },
   { name: 'Types (renderer)', cmd: [npx, 'tsc', '-p', 'tsconfig.web.json', '--noEmit'] },
   { name: 'Types (tests)', cmd: [npx, 'tsc', '-p', 'tsconfig.test.json', '--noEmit'] },
-  { name: 'Unit tests', cmd: [npx, 'vitest', 'run'] },
+  {
+    name: 'Unit tests',
+    cmd: [npx, 'vitest', 'run', '--coverage', '--coverage.reporter=text-summary'],
+  },
   ...(quick
     ? []
     : [

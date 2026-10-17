@@ -22,6 +22,9 @@ export default defineConfig({
         'src/renderer/src/lib/monitor.ts',
       ],
       reporter: ['text', 'html'],
+      // Just below the values without socat (Windows), where the virtual-port
+      // tests of serial.ts are skipped – a drop below means tests went missing.
+      thresholds: { statements: 86, branches: 77, functions: 81, lines: 88 },
     },
   },
 });
