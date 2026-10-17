@@ -5,8 +5,17 @@ updates:
     schedule:
       interval: monthly
     groups:
+      # Minor and patch updates arrive together; every major update gets its
+      # own pull request, so one blocked major (e.g. a TypeScript release that
+      # typescript-eslint does not support yet) cannot hold back the rest.
       dev-dependencies:
         dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # The type definitions follow the oldest supported Node.js version
+      # ("engines" in package.json), not the newest one.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
