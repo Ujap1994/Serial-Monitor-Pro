@@ -60,6 +60,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Without socat the virtual serial port tests are skipped – they once hid
+      # that macOS never reported a vanished device.
+      - name: Install socat (virtual serial port)
+        if: runner.os == 'macOS'
+        run: brew install socat
       - run: npm ci
       - run: npm run check
         env:

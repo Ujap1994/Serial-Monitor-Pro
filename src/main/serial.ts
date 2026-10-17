@@ -5,7 +5,7 @@
 // sent to the renderer in batches – at high baud rates this keeps IPC traffic
 // low without losing the exact receive time of each chunk.
 
-import { readdir, readFile, readlink } from 'node:fs/promises';
+import { access, readdir, readFile, readlink } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { SerialPort } from 'serialport';
@@ -22,6 +22,8 @@ import type {
 import { isSimulatedPath, SimulatedDevice, simulatedPorts } from './simulator';
 
 const BATCH_MS = 8;
+/** How often an open port checks that its device node still exists. */
+const PRESENCE_MS = 1000;
 const PARITY = { None: 'none', Even: 'even', Odd: 'odd', Mark: 'mark', Space: 'space' } as const;
 
 interface Handle {
@@ -162,15 +164,28 @@ function openReal(options: OpenOptions, cb: Callbacks): Promise<Handle> {
       autoOpen: false,
     });
     let intentional = false;
+    let presence: ReturnType<typeof setInterval> | null = null;
     port.on('data', (data: Buffer) => cb.onData(new Uint8Array(data)));
     port.on('error', (err: Error) => console.warn(`[serial] ${options.path}:`, err.message));
     port.on('close', (err?: Error & { disconnected?: boolean }) => {
+      if (presence) clearInterval(presence);
       cb.onClose(!intentional, err?.message);
     });
     port.open((err) => {
       if (err) {
         reject(err);
         return;
+      }
+      // macOS does not report every vanished device (virtual ports, some USB
+      // drivers) – the port then stays "open" forever and auto-reconnect never
+      // starts. Watching the device node catches that on every Unix system.
+      if (process.platform !== 'win32') {
+        presence = setInterval(() => {
+          access(options.path).catch(() => {
+            if (port.isOpen) port.close(() => undefined);
+          });
+        }, PRESENCE_MS);
+        presence.unref();
       }
       resolve({
         write: (data) =>
