@@ -74,7 +74,7 @@ jobs:
         env:
           CI: 'true'
           SMP_APP_EXECUTABLE: ${{ github.workspace }}/release/linux-unpacked/serial-monitor-pro
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}
           path: |
@@ -132,7 +132,7 @@ jobs:
           npx electron-builder --linux flatpak --${{ matrix.arch }} --publish never
           -c.flatpak.runtimeVersion=${{ steps.runtime.outputs.version }}
           -c.flatpak.baseVersion=${{ steps.runtime.outputs.version }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: flatpak-${{ matrix.arch }}
           path: release/*.flatpak
@@ -157,7 +157,7 @@ jobs:
           CI: 'true'
           SMP_APP_EXECUTABLE: ${{ github.workspace }}\release\win-unpacked\Serial Monitor Pro.exe
       - run: npx electron-builder --win nsis portable --arm64 --publish never
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: release/*.exe
@@ -182,7 +182,7 @@ jobs:
           CI: 'true'
           SMP_APP_EXECUTABLE: ${{ github.workspace }}/release/mac-arm64/Serial Monitor Pro.app/Contents/MacOS/Serial Monitor Pro
       - run: npx electron-builder --mac dmg zip --x64 --publish never
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: |
