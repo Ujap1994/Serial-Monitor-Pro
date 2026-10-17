@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- Build and test tooling: Vite 8, electron-vite 6, @vitejs/plugin-react 6, Vitest 5.
+
 ## [1.0.1] – 2026-10-17
 
 ### Fixed
