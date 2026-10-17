@@ -5,9 +5,17 @@ updates:
     schedule:
       interval: monthly
     groups:
-      # Minor and patch updates arrive together; every major update gets its
-      # own pull request, so one blocked major (e.g. a TypeScript release that
-      # typescript-eslint does not support yet) cannot hold back the rest.
+      # Families that only work in matching versions arrive together, major
+      # updates included – vite 8 alone fails because electron-vite 5 and
+      # @vitejs/plugin-react 5 pin older versions, vitest 5 needs coverage-v8 5.
+      vite:
+        patterns: ['vite', 'electron-vite', '@vitejs/*']
+      vitest:
+        patterns: ['vitest', '@vitest/*']
+      typescript:
+        patterns: ['typescript', 'typescript-eslint', '@typescript-eslint/*']
+      # Other minor and patch updates arrive together; every other major update
+      # gets its own pull request, so one blocked major cannot hold back the rest.
       dev-dependencies:
         dependency-type: development
         update-types: [minor, patch]
