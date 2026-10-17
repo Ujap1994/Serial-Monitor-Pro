@@ -1,7 +1,7 @@
 {
   "name": "serial-monitor-pro",
   "productName": "Serial Monitor Pro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A modern serial terminal for development, service and test engineering – hex dump, protocol decoders, frame parser, live graphs, automation and multi-port monitoring.",
   "keywords": [
     "serial",

@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.0.1] – 2026-10-17
+
 ### Fixed
 
 - **Frame parser**: when a telegram ended shortly before the end of the received data, its last
@@ -56,5 +58,6 @@ First open-source release – a complete rewrite in TypeScript/Electron.
 - The licence manager, licence server, admin tool and all build scripts of the former Python version.
   Every function is available to everyone.
 
-[Unreleased]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v1.0.0
