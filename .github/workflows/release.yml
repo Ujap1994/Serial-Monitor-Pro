@@ -200,7 +200,7 @@ jobs:
         run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Release notes
         run: node scripts/release-notes.mjs "${{ needs.verify.outputs.version }}" dist > release-notes.md
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.verify.outputs.version }}
           name: Serial Monitor Pro ${{ needs.verify.outputs.version }}
