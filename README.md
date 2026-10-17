@@ -192,9 +192,12 @@ npm run check:watch    # type checker + unit tests in watch mode while you work
 ```
 
 `npm run check` starts the **real application** and clicks through every tool against the simulated
-devices – no hardware needed. On Linux, a virtual serial port created with `socat` additionally tests
-the real serial code path including auto-reconnect (`sudo apt install socat xvfb`). Git hooks run
-the formatter and linter on every commit and `check:quick` before every push.
+devices – no hardware needed. With `socat` installed (Linux: `sudo apt install socat xvfb`, macOS:
+`brew install socat`) a virtual serial port additionally tests the real serial code path: auto-reconnect,
+256 KiB byte-exact echo, busy ports and the baud rate scanner. Randomised tests feed thousands of
+generated inputs into the frame parser, line assembly, decoders and stop conditions and check that
+the result does not depend on where the data stream is split. The check fails if the test coverage
+drops. Git hooks run the formatter and linter on every commit and `check:quick` before every push.
 
 ### Testing with your own hardware
 
@@ -206,6 +209,13 @@ npm run test:hardware -- --port /dev/ttyUSB0 --baud 115200   # Windows: --port C
 ```
 
 Patterns of different sizes including every byte value 0x00…0xFF are sent and must come back unchanged.
+To test the application's own serial code at several baud rates and frame formats (8N1, 8E1, 8O2, 7E1):
+
+```bash
+SMP_HW_PORT=/dev/ttyUSB0 npx vitest run tests/unit/serial-hardware.test.ts
+```
+
+Both tests only ever touch the port you name – nothing is sent to other connected devices.
 
 ### Building packages
 

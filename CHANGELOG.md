@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Frame parser**: when a telegram ended shortly before the end of the received data, its last
+  bytes were kept as a possible header start. Together with the next data they could form a false
+  header, so the result depended on how the operating system split the stream.
+- **Live graph**: numbers beyond the floating-point range (such as `1e999`) are ignored instead of
+  being plotted as infinity.
+
+### Changed
+
+- Electron 44.7.2.
+- Tests: randomised robustness tests for frame parser, line assembly, decoders and stop conditions;
+  more tests on a virtual serial port (load, busy port, lost device, baud rate scanner), now also on
+  macOS; minimum test coverage; opt-in hardware test through the application's serial code.
+
 ## [1.0.0] – 2026-10-17
 
 First open-source release – a complete rewrite in TypeScript/Electron.
@@ -39,4 +56,5 @@ First open-source release – a complete rewrite in TypeScript/Electron.
 - The licence manager, licence server, admin tool and all build scripts of the former Python version.
   Every function is available to everyone.
 
+[Unreleased]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v1.0.0

@@ -12,20 +12,21 @@ npm run dev:sim        # app with hot reload and simulated devices
 ```
 
 Requirements: Node.js 22+, Git. On Linux the end-to-end tests additionally need `xvfb` (when no
-display is available) and optionally `socat` for the virtual serial port test:
-`sudo apt install xvfb socat`.
+display is available). Install `socat` for the virtual serial port tests – without it they are
+skipped silently: `sudo apt install xvfb socat` (Linux) or `brew install socat` (macOS).
 
 ## The quality check
 
-| Command                                         | Purpose                                                                       |
-| ----------------------------------------------- | ----------------------------------------------------------------------------- |
-| `npm run check`                                 | Everything: format, lint, types, unit tests, build, end-to-end tests          |
-| `npm run check:quick`                           | Fast subset without build and end-to-end tests (runs before every `git push`) |
-| `npm run check -- --fix`                        | Format and auto-fix first                                                     |
-| `npm run check:watch`                           | Type checker and unit tests in watch mode                                     |
-| `npm run test:e2e`                              | Build and run only the end-to-end tests                                       |
-| `npm run test:hardware -- --port <path>`        | Loopback test with a real adapter (TX ↔ RX)                                   |
-| `SMP_APP_EXECUTABLE=<path> npx playwright test` | End-to-end tests against a packaged build                                     |
+| Command                                                                | Purpose                                                                       |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `npm run check`                                                        | Everything: format, lint, types, unit tests, build, end-to-end tests          |
+| `npm run check:quick`                                                  | Fast subset without build and end-to-end tests (runs before every `git push`) |
+| `npm run check -- --fix`                                               | Format and auto-fix first                                                     |
+| `npm run check:watch`                                                  | Type checker and unit tests in watch mode                                     |
+| `npm run test:e2e`                                                     | Build and run only the end-to-end tests                                       |
+| `npm run test:hardware -- --port <path>`                               | Loopback test with a real adapter (TX ↔ RX)                                   |
+| `SMP_HW_PORT=<path> npx vitest run tests/unit/serial-hardware.test.ts` | The same through the app's serial code, several baud rates and frame formats  |
+| `SMP_APP_EXECUTABLE=<path> npx playwright test`                        | End-to-end tests against a packaged build                                     |
 
 A pull request is ready when `npm run check` passes locally. CI runs the same check on Linux, Windows
 and macOS.
@@ -44,7 +45,10 @@ and macOS.
 
 ## Adding a feature
 
-1. Put the logic into `src/shared/core/` and test it in `tests/unit/`.
+1. Put the logic into `src/shared/core/` and test it in `tests/unit/`. Anything that consumes the
+   serial stream also belongs in `tests/unit/robustness.test.ts`: the result must not depend on
+   where the stream is split. The check fails when the coverage drops below the thresholds in
+   `vitest.config.ts`.
 2. Add texts to `src/shared/i18n/de.ts` **and** `en.ts`.
 3. Build the UI in `src/renderer/src/`.
 4. If the feature needs a device, extend a simulated device in `src/main/simulator.ts` and add an

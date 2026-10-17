@@ -92,10 +92,13 @@ npm run check          # kompletter Prüfablauf vor jedem Commit
 ```
 
 `npm run check` prüft Formatierung, Lint-Regeln, Typen, alle Unit-Tests und startet anschließend die
-**echte Anwendung**, die jede Funktion gegen die simulierten Geräte durchklickt. Für den Test mit
-eigener Hardware TX und RX eines USB-Seriell-Adapters brücken und
-`npm run test:hardware -- --port /dev/ttyUSB0` (Windows: `--port COM3`) ausführen.
-Details: [CONTRIBUTING.md](CONTRIBUTING.md).
+**echte Anwendung**, die jede Funktion gegen die simulierten Geräte durchklickt. Mit `socat`
+(Linux: `sudo apt install socat xvfb`, macOS: `brew install socat`) kommt ein virtueller serieller Port
+dazu, Zufallstests prüfen Frame-Parser, Zeilenbildung und Decoder mit Tausenden erzeugter Eingaben,
+und sinkt die Testabdeckung, schlägt die Prüfung fehl. Für den Test mit eigener Hardware TX und RX
+eines USB-Seriell-Adapters brücken und `npm run test:hardware -- --port /dev/ttyUSB0` (Windows:
+`--port COM3`) bzw. `SMP_HW_PORT=/dev/ttyUSB0 npx vitest run tests/unit/serial-hardware.test.ts`
+ausführen – beide sprechen nur den genannten Port an. Details: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## ⚖️ Haftungsausschluss
 
