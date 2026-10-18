@@ -48,6 +48,15 @@ jobs:
       - run: npm run check
         env:
           CI: 'true'
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-report-verify
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
 
   linux:
     name: Linux ${{ matrix.arch }} (AppImage, deb, rpm, pacman, tar.gz)
@@ -76,7 +85,7 @@ jobs:
           SMP_APP_EXECUTABLE: ${{ github.workspace }}/release/linux-unpacked/serial-monitor-pro
       - uses: actions/upload-artifact@v7
         with:
-          name: linux-${{ matrix.arch }}
+          name: package-linux-${{ matrix.arch }}
           path: |
             release/*.AppImage
             release/*.deb
@@ -84,6 +93,15 @@ jobs:
             release/*.pacman
             release/*.tar.gz
           if-no-files-found: error
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-report-linux-${{ matrix.arch }}
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
 
   flatpak:
     name: Flatpak ${{ matrix.arch }}
@@ -134,7 +152,7 @@ jobs:
           -c.flatpak.baseVersion=${{ steps.runtime.outputs.version }}
       - uses: actions/upload-artifact@v7
         with:
-          name: flatpak-${{ matrix.arch }}
+          name: package-flatpak-${{ matrix.arch }}
           path: release/*.flatpak
           if-no-files-found: error
 
@@ -159,9 +177,18 @@ jobs:
       - run: npx electron-builder --win nsis portable --arm64 --publish never
       - uses: actions/upload-artifact@v7
         with:
-          name: windows
+          name: package-windows
           path: release/*.exe
           if-no-files-found: error
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-report-windows
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
 
   macos:
     name: macOS (Apple Silicon + Intel)
@@ -176,6 +203,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx electron-builder --mac dmg zip --arm64 --publish never
+      # Without socat the reconnect test on a virtual serial port is skipped.
+      - name: Install socat (virtual serial port)
+        run: brew install socat
       - name: Test the packaged application (Apple Silicon)
         run: npx playwright test
         env:
@@ -184,11 +214,20 @@ jobs:
       - run: npx electron-builder --mac dmg zip --x64 --publish never
       - uses: actions/upload-artifact@v7
         with:
-          name: macos
+          name: package-macos
           path: |
             release/*.dmg
             release/*.zip
           if-no-files-found: error
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-report-macos
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
 
   # Runs in test runs as well, so they also cover the hand-over of the
   # artifacts, the checksums and the release notes – only the last step
@@ -201,6 +240,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
+          # Only the packages – test reports of a failed earlier attempt must
+          # never end up in a release.
+          pattern: package-*
           path: dist
           merge-multiple: true
       - name: Checksums
