@@ -22,10 +22,10 @@ export default defineConfig({
         'src/renderer/src/lib/monitor.ts',
       ],
       reporter: ['text', 'html'],
-      // About two points below the measured values (93/83/93/96 %, the same with
-      // and without socat thanks to the scripted driver in serial-port-mock) –
-      // a drop below means tests went missing.
-      thresholds: { statements: 91, branches: 80, functions: 91, lines: 93 },
+      // About two points below the lowest measured values (Windows: 92.5/82.8/
+      // 91.8/95.1 %, where the presence check test is skipped) – a drop below
+      // means tests went missing.
+      thresholds: { statements: 90, branches: 80, functions: 90, lines: 93 },
     },
   },
 });
