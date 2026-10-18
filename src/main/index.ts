@@ -19,6 +19,7 @@ import icon from '../../resources/icon.png?asset';
 import { APP_NAME, REPOSITORY_URL } from './constants';
 import { buildMenu } from './menu';
 import { listPorts, SerialManager } from './serial';
+import { simulatedPorts } from './simulator';
 import { Storage } from './storage';
 import { loadWindowState, trackWindowState } from './window-state';
 
@@ -28,6 +29,8 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 if (process.env.SMP_USER_DATA_DIR) app.setPath('userData', process.env.SMP_USER_DATA_DIR);
 
 const simulatorForced = process.argv.includes('--simulator') || process.env.SMP_SIMULATOR === '1';
+// Screenshots and demos must not show the real devices of whoever creates them.
+const simulatedOnly = process.env.SMP_SIMULATED_ONLY === '1';
 const STORES: StoreName[] = ['settings', 'commands', 'automation'];
 
 let mainWindow: BrowserWindow | null = null;
@@ -116,7 +119,7 @@ function createWindow(): void {
 
 function registerIpc(): void {
   ipcMain.handle(IPC.serialList, (_e, includeSimulated: boolean) =>
-    listPorts(Boolean(includeSimulated) || simulatorForced),
+    simulatedOnly ? simulatedPorts() : listPorts(Boolean(includeSimulated) || simulatorForced),
   );
   ipcMain.handle(IPC.serialOpen, (_e, id: string, options: OpenOptions) =>
     serial.open(String(id), options),

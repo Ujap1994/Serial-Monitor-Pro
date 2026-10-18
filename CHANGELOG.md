@@ -14,6 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **Documentation**: a complete user guide in the README – every tool explained with annotated
+  pictures, a CRC reference table, the simulated devices, files and troubleshooting. The disclaimer now
+  comes first. The documentation is English only; the German README was merged into it (the
+  application itself stays bilingual).
 - Build and test tooling: Vite 8, electron-vite 6, @vitejs/plugin-react 6, Vitest 5.
 - Tests: the real-port code path also runs against a scripted serial driver, so failures such as
   a vanished device are tested on every platform including Windows; higher minimum test coverage.
