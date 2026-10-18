@@ -11,6 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Build and test tooling: Vite 8, electron-vite 6, @vitejs/plugin-react 6, Vitest 5.
 - Tests: the real-port code path also runs against a scripted serial driver, so failures such as
   a vanished device are tested on every platform including Windows; higher minimum test coverage.
+- Hardware tests: also through the user interface (`tests/e2e/hardware.spec.ts`); the loopback test
+  sends in small blocks so that it tests the application, not the buffer size of the adapter.
 
 ## [1.0.1] – 2026-10-17
 

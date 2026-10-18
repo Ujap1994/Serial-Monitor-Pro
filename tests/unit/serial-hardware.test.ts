@@ -42,12 +42,19 @@ describe.skipIf(!path)(`real hardware loopback on ${path ?? '(no SMP_HW_PORT)'}`
         const values = format.dataBits === 7 ? 128 : 256;
         const payload = Uint8Array.from({ length: 1024 }, (_, i) => i % values);
         received = [];
-        expect(await manager.write('hw', payload)).toEqual({ ok: true });
-        // Ten bits per byte or more; allow three times the time on the wire plus a second.
-        const wireMs = ((payload.length * 12) / baudRate) * 1000;
-        await expect
-          .poll(() => received.length, { timeout: 1000 + wireMs * 3 })
-          .toBe(payload.length);
+        // Block by block, each echoed before the next. Simple adapters have tiny
+        // buffers – the ATmega16U2 of an Arduino Uno (128 bytes) loses and
+        // repeats data under sustained load above 115200 baud – and this test
+        // is about the application, not the adapter. Sustained throughput is
+        // what `npm run test:hardware` measures.
+        const block = 32;
+        for (let off = 0; off < payload.length; off += block) {
+          const part = payload.subarray(off, off + block);
+          expect(await manager.write('hw', part)).toEqual({ ok: true });
+          await expect
+            .poll(() => received.length, { interval: 1, timeout: 1000 })
+            .toBe(off + part.length);
+        }
         expect(received).toEqual(Array.from(payload));
       }, 20_000);
     }

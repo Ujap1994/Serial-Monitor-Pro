@@ -26,6 +26,7 @@ skipped silently: `sudo apt install xvfb socat` (Linux) or `brew install socat` 
 | `npm run test:e2e`                                                     | Build and run only the end-to-end tests                                       |
 | `npm run test:hardware -- --port <path>`                               | Loopback test with a real adapter (TX ↔ RX)                                   |
 | `SMP_HW_PORT=<path> npx vitest run tests/unit/serial-hardware.test.ts` | The same through the app's serial code, several baud rates and frame formats  |
+| `SMP_HW_PORT=<path> npx playwright test tests/e2e/hardware.spec.ts`    | The real app through its UI against the adapter (build first)                 |
 | `SMP_APP_EXECUTABLE=<path> npx playwright test`                        | End-to-end tests against a packaged build                                     |
 
 A pull request is ready when `npm run check` passes locally. CI runs the same check on Linux, Windows

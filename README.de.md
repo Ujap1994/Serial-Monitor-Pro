@@ -98,7 +98,8 @@ dazu, Zufallstests prüfen Frame-Parser, Zeilenbildung und Decoder mit Tausenden
 und sinkt die Testabdeckung, schlägt die Prüfung fehl. Für den Test mit eigener Hardware TX und RX
 eines USB-Seriell-Adapters brücken und `npm run test:hardware -- --port /dev/ttyUSB0` (Windows:
 `--port COM3`) bzw. `SMP_HW_PORT=/dev/ttyUSB0 npx vitest run tests/unit/serial-hardware.test.ts`
-ausführen – beide sprechen nur den genannten Port an. Details: [CONTRIBUTING.md](CONTRIBUTING.md).
+ausführen – beide sprechen nur den genannten Port an. Ein Arduino Uno taugt als Testadapter: Pin 0
+mit Pin 1 _und_ RESET mit GND brücken. Details: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## ⚖️ Haftungsausschluss
 

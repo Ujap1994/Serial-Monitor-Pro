@@ -213,9 +213,17 @@ To test the application's own serial code at several baud rates and frame format
 
 ```bash
 SMP_HW_PORT=/dev/ttyUSB0 npx vitest run tests/unit/serial-hardware.test.ts
+npm run build && SMP_HW_PORT=/dev/ttyUSB0 npx playwright test tests/e2e/hardware.spec.ts   # through the UI
 ```
 
-Both tests only ever touch the port you name – nothing is sent to other connected devices.
+These tests only ever touch the port you name – nothing is sent to other connected devices.
+
+> [!TIP]
+> **An Arduino Uno makes a fine loopback adapter:** connect pin 0 (RX) with pin 1 (TX) _and_ RESET
+> with GND. The second jumper keeps the ATmega328P in reset; otherwise its sketch or bootloader drives
+> the TX line and the echo does not get through. The board's USB chip has a 128-byte buffer and loses
+> data under sustained load above 115200 baud – `npm run test:hardware` shows that limit, the tests
+> above send in small blocks and work up to 1 Mbaud.
 
 ### Building packages
 
