@@ -103,14 +103,14 @@ Every package is available for **x64** (Intel/AMD) and **arm64** (Apple Silicon,
 
 | System                                  | Package                                                         | Install                                                                         |
 | --------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Windows 10/11**                       | `…-windows-x64-setup.exe` / `…-arm64-setup.exe`                 | Run the installer. No installation wanted? Use `…-portable.exe`.                |
+| **Windows 10/11**                       | `…-windows-x64-setup.exe` / `…-windows-arm64-setup.exe`         | Run the installer. No installation wanted? Use `…-portable.exe`.                |
 | **macOS 11+**                           | `…-macos-arm64.dmg` (Apple Silicon) / `…-macos-x64.dmg` (Intel) | Open the DMG and drag the app to _Applications_.                                |
 | **Debian, Ubuntu, Mint, Pop!\_OS**      | `…-linux-amd64.deb` / `…-linux-arm64.deb`                       | `sudo apt install ./SerialMonitorPro-*.deb`                                     |
 | **Fedora, RHEL, openSUSE**              | `…-linux-x86_64.rpm` / `…-linux-aarch64.rpm`                    | `sudo dnf install ./SerialMonitorPro-*.rpm` (openSUSE: `sudo zypper install …`) |
-| **Arch, Manjaro, EndeavourOS, CachyOS** | `…-linux-x64.pacman` / `…-linux-arm64.pacman`                   | `sudo pacman -U SerialMonitorPro-*.pacman`                                      |
-| **Any distribution** – Flatpak          | `…-linux-x86_64.flatpak`                                        | `flatpak install --user SerialMonitorPro-*.flatpak`                             |
-| **Any distribution** – AppImage         | `…-linux-x86_64.AppImage`                                       | `chmod +x SerialMonitorPro-*.AppImage && ./SerialMonitorPro-*.AppImage`         |
-| **Any distribution** – archive          | `…-linux-x64.tar.gz`                                            | Extract and start `serial-monitor-pro`.                                         |
+| **Arch, Manjaro, EndeavourOS, CachyOS** | `…-linux-x64.pacman` / `…-linux-aarch64.pacman`                 | `sudo pacman -U SerialMonitorPro-*.pacman`                                      |
+| **Any distribution** – Flatpak          | `…-linux-x86_64.flatpak` / `…-linux-aarch64.flatpak`            | `flatpak install --user SerialMonitorPro-*.flatpak`                             |
+| **Any distribution** – AppImage         | `…-linux-x86_64.AppImage` / `…-linux-arm64.AppImage`            | `chmod +x SerialMonitorPro-*.AppImage && ./SerialMonitorPro-*.AppImage`         |
+| **Any distribution** – archive          | `…-linux-x64.tar.gz` / `…-linux-arm64.tar.gz`                   | Extract and start `serial-monitor-pro`.                                         |
 
 Verify downloads with `SHA256SUMS.txt` from the release: `sha256sum -c SHA256SUMS.txt --ignore-missing`.
 
