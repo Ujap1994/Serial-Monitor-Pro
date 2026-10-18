@@ -1,6 +1,7 @@
 // Steps of an automation sequence.
 
 import { t } from '../i18n';
+import { concatBytes, indexOfBytes } from './bytes';
 import { isDataFormat, type DataFormat } from './format';
 import { isNewline, type Newline } from './commands';
 
@@ -59,4 +60,54 @@ export function normalizeStep(value: unknown): Step {
     value: Number.isFinite(n) && n >= 0 ? Math.round(n) : 500,
     note: text(d.note),
   };
+}
+
+/**
+ * Collects received data for "expect response" steps.
+ *
+ * Everything received since the last send counts – a device often answers
+ * within a few milliseconds, before the expect step has even started, and that
+ * answer must not be lost. Data before the send is discarded: it cannot be the
+ * answer to the request.
+ */
+export class ResponseWatcher {
+  private buffer: Uint8Array = new Uint8Array();
+  private needle: Uint8Array | null = null;
+
+  get waiting(): boolean {
+    return this.needle !== null;
+  }
+
+  /** A request goes out. */
+  sent(): void {
+    this.buffer = new Uint8Array();
+  }
+
+  /** Starts waiting for the pattern; true if it has already been received. */
+  expect(needle: Uint8Array): boolean {
+    this.needle = needle;
+    return this.check();
+  }
+
+  /** Adds received data; true when the awaited pattern is now complete. */
+  push(data: Uint8Array): boolean {
+    this.buffer = concatBytes(this.buffer, data);
+    if (this.buffer.length > 65536) this.buffer = this.buffer.slice(-8192);
+    return this.check();
+  }
+
+  reset(): void {
+    this.buffer = new Uint8Array();
+    this.needle = null;
+  }
+
+  private check(): boolean {
+    if (!this.needle) return false;
+    const at = indexOfBytes(this.buffer, this.needle);
+    if (at < 0) return false;
+    // What follows the match may already answer the next expect step.
+    this.buffer = this.buffer.slice(at + this.needle.length);
+    this.needle = null;
+    return true;
+  }
 }

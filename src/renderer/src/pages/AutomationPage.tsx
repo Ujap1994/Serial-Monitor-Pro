@@ -10,9 +10,8 @@ import {
   Trash2,
   Workflow,
 } from 'lucide-react';
-import { concatBytes, indexOfBytes } from '@shared/core/bytes';
 import { parseSendData } from '@shared/core/format';
-import { describeStep, type Step } from '@shared/core/steps';
+import { describeStep, ResponseWatcher, type Step } from '@shared/core/steps';
 import { formatTimestamp } from '@shared/core/timestamp';
 import { TextLog, type TextLogHandle } from '../components/LogView';
 import { Button, Card, Check, Empty, PageHeader } from '../components/ui';
@@ -28,7 +27,7 @@ interface Run {
   active: boolean;
   index: number;
   timer: ReturnType<typeof setTimeout> | null;
-  expect: { needle: Uint8Array; buffer: Uint8Array } | null;
+  watcher: ResponseWatcher;
 }
 
 export function AutomationPage(): ReactNode {
@@ -42,7 +41,12 @@ export function AutomationPage(): ReactNode {
   const [current, setCurrent] = useState(-1);
   const [status, setStatus] = useState(t('common.ready'));
   const log = useRef<TextLogHandle>(null);
-  const run = useRef<Run>({ active: false, index: 0, timer: null, expect: null });
+  const run = useRef<Run>({
+    active: false,
+    index: 0,
+    timer: null,
+    watcher: new ResponseWatcher(),
+  });
   const loopRef = useLatest(loop);
   const index = Math.min(selected, steps.length - 1);
 
@@ -53,7 +57,7 @@ export function AutomationPage(): ReactNode {
   const stop = (reason: string, kind: 'sys' | 'ok' | 'err' = 'sys'): void => {
     const r = run.current;
     r.active = false;
-    r.expect = null;
+    r.watcher.reset();
     if (r.timer) clearTimeout(r.timer);
     r.timer = null;
     setRunning(false);
@@ -67,6 +71,12 @@ export function AutomationPage(): ReactNode {
     const r = run.current;
     if (r.timer) clearTimeout(r.timer);
     r.timer = setTimeout(fn, ms);
+  };
+
+  const answered = (): void => {
+    write(t('automation.received'), 'ok');
+    run.current.index++;
+    later(10, () => void advance());
   };
 
   /**
@@ -89,6 +99,7 @@ export function AutomationPage(): ReactNode {
 
     switch (step.kind) {
       case 'send': {
+        r.watcher.sent();
         const ok = await sendCommand(
           {
             name: t('automation.stepName', { n: r.index + 1 }),
@@ -120,11 +131,11 @@ export function AutomationPage(): ReactNode {
           return stop(t('automation.stopped.patternInvalid'), 'err');
         }
         write(t('automation.expecting', { data: step.data, ms: step.value }));
-        r.expect = { needle, buffer: new Uint8Array() };
         // A separate timer only for the timeout – the match itself comes from the data.
         later(Math.max(10, step.value), () => {
-          if (r.active && r.expect) stop(t('automation.stopped.timeout'), 'err');
+          if (r.active && r.watcher.waiting) stop(t('automation.stopped.timeout'), 'err');
         });
+        if (r.watcher.expect(needle)) answered();
         return;
       }
       case 'log':
@@ -138,16 +149,7 @@ export function AutomationPage(): ReactNode {
   useEffect(() => {
     return rxBus.on((chunk) => {
       const r = run.current;
-      if (!r.active || !r.expect) return;
-      let buffer = concatBytes(r.expect.buffer, chunk.data);
-      if (buffer.length > 65536) buffer = buffer.slice(-8192);
-      r.expect.buffer = buffer;
-      if (indexOfBytes(buffer, r.expect.needle) >= 0) {
-        write(t('automation.received'), 'ok');
-        r.expect = null;
-        r.index++;
-        later(10, () => void advance());
-      }
+      if (r.active && r.watcher.push(chunk.data)) answered();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -173,7 +175,7 @@ export function AutomationPage(): ReactNode {
       await alertDialog(t('error.notConnectedTitle'), t('error.notConnected'), 'warn');
       return;
     }
-    run.current = { active: true, index: 0, timer: null, expect: null };
+    run.current = { active: true, index: 0, timer: null, watcher: new ResponseWatcher() };
     setRunning(true);
     setBusy('automation', true);
     write(`── ${t('automation.started')} ──`, 'ok');

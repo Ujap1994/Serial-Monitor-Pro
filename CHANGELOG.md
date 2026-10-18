@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- **Automation**: an answer that arrived before the _expect response_ step had started was missed
+  and the sequence ended with a timeout – with fast devices (answers within a few milliseconds)
+  almost every time. Everything received since the last send now counts.
+
 ### Changed
 
 - Build and test tooling: Vite 8, electron-vite 6, @vitejs/plugin-react 6, Vitest 5.

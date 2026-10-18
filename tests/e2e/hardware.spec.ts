@@ -36,6 +36,28 @@ test.describe('real hardware loopback', () => {
     });
   });
 
+  test.describe('automation', () => {
+    test.use({
+      seed: {
+        settings: { port: path, baud: 115200 },
+        automation: [
+          { kind: 'send', data: 'PING', fmt: 'ASCII', newline: 'CRLF', value: 0 },
+          { kind: 'expect', data: 'PING', fmt: 'ASCII', value: 1000 },
+        ],
+      },
+    });
+
+    test('catches the echo of a real device in an expect step', async ({ page }) => {
+      await page.getByTestId('connect-button').click();
+      await expect(page.getByTestId('connection-state')).toHaveText('connected');
+      await page.getByTestId('tab-automation').click();
+      for (let run = 0; run < 5; run++) {
+        await page.getByTestId('automation-run').click();
+        await expect(page.getByTestId('automation-status')).toHaveText('Sequence finished');
+      }
+    });
+  });
+
   test.describe('9600 baud 8E1', () => {
     test.use({ seed: { settings: { port: path, baud: 9600, parity: 'Even' } } });
 

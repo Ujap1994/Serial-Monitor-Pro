@@ -149,6 +149,27 @@ test.describe('automation', () => {
     await expect(page.getByTestId('automation-log')).toContainText('Response received');
   });
 
+  test.describe('with a device that answers at once', () => {
+    test.use({
+      seed: {
+        automation: [
+          { kind: 'send', data: 'PING', fmt: 'ASCII', newline: 'CRLF', value: 0 },
+          { kind: 'expect', data: 'PING', fmt: 'ASCII', value: 1000 },
+        ],
+      },
+    });
+
+    test('does not miss an answer that arrives before the expect step starts', async ({ page }) => {
+      // The loopback answers after 3 ms – before the expect step has started.
+      await connect(page, 'sim:loopback');
+      await page.getByTestId('tab-automation').click();
+      for (let run = 0; run < 5; run++) {
+        await page.getByTestId('automation-run').click();
+        await expect(page.getByTestId('automation-status')).toHaveText('Sequence finished');
+      }
+    });
+  });
+
   test('aborts when the expected answer does not come', async ({ page }) => {
     await connect(page, 'sim:loopback');
     await page.getByTestId('tab-automation').click();
