@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { de } from '@shared/i18n/de';
 import { en } from '@shared/i18n/en';
-import { interpolate, resolveLanguage } from '@shared/i18n';
+import {
+  formatCount,
+  getLanguage,
+  interpolate,
+  onLanguageChange,
+  resolveLanguage,
+  setLanguage,
+  t,
+  tIn,
+} from '@shared/i18n';
 
 const placeholders = (text: string): string[] =>
   [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1] ?? '').sort();
@@ -31,5 +40,33 @@ describe('translations', () => {
     expect(resolveLanguage('auto', 'de-AT')).toBe('de');
     expect(resolveLanguage('auto', 'fr-FR')).toBe('en');
     expect(resolveLanguage('en', 'de-DE')).toBe('en');
+  });
+});
+
+describe('switching the language', () => {
+  it('notifies listeners once per real change and lets them unsubscribe', () => {
+    setLanguage('en');
+    const seen: string[] = [];
+    const off = onLanguageChange((lang) => seen.push(lang));
+    setLanguage('de');
+    setLanguage('de');
+    off();
+    setLanguage('en');
+    expect(seen).toEqual(['de']);
+    expect(getLanguage()).toBe('en');
+  });
+
+  it('translates in the current or an explicit language', () => {
+    setLanguage('de');
+    expect(t('nmea.notNmea')).toBe(de['nmea.notNmea']);
+    expect(tIn('en', 'nmea.notNmea')).toBe(en['nmea.notNmea']);
+    setLanguage('en');
+  });
+
+  it('formats counts with the thousands separator of the language', () => {
+    setLanguage('de');
+    expect(formatCount(1234567)).toBe('1.234.567');
+    setLanguage('en');
+    expect(formatCount(1234567)).toBe('1,234,567');
   });
 });
