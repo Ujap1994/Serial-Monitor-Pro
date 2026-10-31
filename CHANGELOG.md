@@ -31,6 +31,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Requested control-line failures are reported instead of silently accepted; hardware flow control
   cannot be overwritten by manual line or BREAK operations.
 - Opening, closing and scanning ports reserve ownership throughout asynchronous transitions.
+- File pieces are generated on demand, so a large file with one-byte blocks does not allocate millions of arrays.
 - Cancelling file transmission closes the port to release stalled writes, and pause listeners are
   removed after each block. Progress counts completed writes rather than claiming device acknowledgement.
 - Release notes are rendered as text/Markdown elements without HTML execution; version validation,

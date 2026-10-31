@@ -4,7 +4,7 @@ import { formatCount, t } from '@shared/i18n';
 import { StreamAssembler } from '@shared/core/assembler';
 import { commandBytes, type Command, type Newline } from '@shared/core/commands';
 import { monitorSendBytes } from '@shared/core/transmit-crc';
-import { splitForSending, type FileSendMode } from '@shared/core/filesend';
+import { sendPieces, type FileSendMode } from '@shared/core/filesend';
 import { InputError, type DataFormat } from '@shared/core/format';
 import { fileStamp } from '@shared/core/timestamp';
 import type {
@@ -392,7 +392,7 @@ export async function sendFile(
     setStatus(t('sendfile.busy'), 'warn');
     return 'failed';
   }
-  const pieces = splitForSending(file.data, options.mode, options.blockSize);
+  const pieces = sendPieces(file.data, options.mode, options.blockSize);
   const total = file.data.length;
   const started = performance.now();
   let sent = 0;
@@ -407,7 +407,7 @@ export async function sendFile(
   try {
     systemLine(t('sendfile.started', { name: file.name, bytes: formatCount(total) }));
     onProgress(0, total);
-    for (const [i, piece] of pieces.entries()) {
+    for (const piece of pieces) {
       if (signal.aborted) {
         outcome = 'cancelled';
         break;
@@ -425,7 +425,7 @@ export async function sendFile(
         reported = performance.now();
         onProgress(sent, total);
       }
-      if (options.pauseMs > 0 && i < pieces.length - 1) {
+      if (options.pauseMs > 0 && sent < total) {
         await new Promise<void>((resolve) => {
           const done = (): void => {
             clearTimeout(timer);

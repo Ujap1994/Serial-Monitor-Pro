@@ -31,13 +31,15 @@ The draft has been incorporated into this release; no original work was discarde
 
 ## Verification and handoff — 1.1.0
 
-- `npm run check`: passed on local macOS, 910 unit/integration tests and 38 Electron E2E tests.
+- `npm run check`: passed on local macOS, 915 unit/integration tests and 38 Electron E2E tests.
   Hardware tests remained opt-in (16 unit, 3 E2E skipped); no physical port was opened.
-- Coverage: statements 94.43%, branches 85.02%, functions 95.27%, lines 96.52%.
-- `npm run docs:screenshots`: 26 anonymized images regenerated and inspected.
+- Coverage: statements 94.46%, branches 85.21%, functions 95.29%, lines 96.53%.
+- `npm run docs:screenshots`: 26 anonymized images regenerated; new CRC and update views visually inspected.
 - Separate Codex review/test workers contributed main-process/packaging/test changes, but their
   work was interrupted by a usage limit. Parent Codex completed integration and validation.
   This is not a claim that Claude Code reviewed the resulting patch.
 - Release packaging is being verified by GitHub; publication status and links will be added here.
 - Follow-up scope is in `docs/DEVELOPMENT_STATUS.md`; hardware/soak acceptance is in
   `docs/LONG_RUN_TEST_CHECKLIST.md`. CLI is assessed, not implemented.
+
+- Follow-up: file transfer now generates pieces lazily, including the 16 MiB / one-byte-block edge case. The first package run was cancelled before publication to include this fix.

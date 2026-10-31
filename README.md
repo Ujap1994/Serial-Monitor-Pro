@@ -832,7 +832,7 @@ These tests only ever touch the port you name – nothing is sent to other conne
 > **An Arduino Uno makes a fine loopback adapter:** connect pin 0 (RX) with pin 1 (TX) _and_ RESET
 > with GND. The second jumper keeps the ATmega328P in reset; otherwise its sketch or bootloader drives
 > the TX line and the echo does not get through. The board's USB chip has a 128-byte buffer and loses
-> data under sustained load above 115200 baud – `npm run test:hardware` shows that limit, the tests
+> data under sustained load depending on its firmware and pacing – `npm run test:hardware` measures the tested setup, while the tests
 > above send in small blocks and work up to 1 Mbaud.
 
 ### Screenshots

@@ -11,30 +11,41 @@ export const MAX_SEND_FILE_BYTES = 16 * 1024 * 1024;
  * lines  – one piece per line, the line end (LF) included; a line longer than
  *          `blockSize` is split further, so no piece exceeds the block size.
  */
-export function splitForSending(
+function blockLength(blockSize: number): number {
+  if (!Number.isFinite(blockSize) || blockSize < 1) throw new RangeError('Invalid block size');
+  return Math.floor(blockSize);
+}
+
+/** Generates one view at a time: a 16 MiB file with 1-byte blocks must not allocate 16M views. */
+export function* sendPieces(
   data: Uint8Array,
   mode: FileSendMode,
   blockSize: number,
-): Uint8Array[] {
-  const size = Math.max(1, Math.floor(blockSize));
-  const pieces: Uint8Array[] = [];
-  const pushBlocks = (from: number, to: number): void => {
-    for (let pos = from; pos < to; pos += size)
-      pieces.push(data.subarray(pos, Math.min(pos + size, to)));
-  };
-  if (mode === 'blocks') {
-    pushBlocks(0, data.length);
-    return pieces;
-  }
+): Generator<Uint8Array> {
+  const size = blockLength(blockSize);
   let start = 0;
   for (let i = 0; i < data.length; i++) {
-    if (data[i] === 0x0a) {
-      pushBlocks(start, i + 1);
+    if (i - start + 1 === size || (mode === 'lines' && data[i] === 0x0a)) {
+      yield data.subarray(start, i + 1);
       start = i + 1;
     }
   }
-  pushBlocks(start, data.length);
-  return pieces;
+  if (start < data.length) yield data.subarray(start);
+}
+
+/** Counts pieces for the preview without allocating any per-piece arrays. */
+export function countSendPieces(data: Uint8Array, mode: FileSendMode, blockSize: number): number {
+  const size = blockLength(blockSize);
+  if (mode === 'blocks') return Math.ceil(data.length / size);
+  let count = 0;
+  let start = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] === 0x0a) {
+      count += Math.ceil((i + 1 - start) / size);
+      start = i + 1;
+    }
+  }
+  return count + Math.ceil((data.length - start) / size);
 }
 
 /** Seconds the transfer needs at least: time on the wire plus the pauses. */

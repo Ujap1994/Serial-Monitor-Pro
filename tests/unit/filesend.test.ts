@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { concatBytes } from '@shared/core/bytes';
-import { estimateSeconds, splitForSending } from '@shared/core/filesend';
+import {
+  countSendPieces,
+  estimateSeconds,
+  sendPieces,
+  MAX_SEND_FILE_BYTES,
+} from '@shared/core/filesend';
 import { ascii } from './helpers';
+import type { FileSendMode } from '@shared/core/filesend';
+const splitForSending = (data: Uint8Array, mode: FileSendMode, size: number): Uint8Array[] =>
+  Array.from(sendPieces(data, mode, size));
 
 const hex = (pieces: Uint8Array[]): string[] =>
   pieces.map((p) => new TextDecoder().decode(p).replace(/\n/g, '⏎'));
@@ -34,6 +42,7 @@ describe('splitForSending', () => {
       const size = 1 + rnd(300);
       const mode = rnd(2) ? 'lines' : 'blocks';
       const pieces = splitForSending(data, mode, size);
+      expect(countSendPieces(data, mode, size)).toBe(pieces.length);
       expect(Buffer.from(concatBytes(...pieces)).equals(Buffer.from(data)), `case ${n}`).toBe(true);
       expect(
         pieces.every((p) => p.length >= 1 && p.length <= size),
@@ -52,4 +61,18 @@ describe('estimateSeconds', () => {
     // 960 bytes at 9600 baud = 1 s, plus 9 pauses of 100 ms
     expect(estimateSeconds(960, 10, 9600, 100)).toBeCloseTo(1.9);
   });
+});
+
+it('supports the maximum file size with one-byte blocks without eager allocation', () => {
+  const data = new Uint8Array(MAX_SEND_FILE_BYTES);
+  data[1] = 42;
+  expect(countSendPieces(data, 'blocks', 1)).toBe(MAX_SEND_FILE_BYTES);
+  const iterator = sendPieces(data, 'blocks', 1);
+  expect(iterator.next().value).toEqual(Uint8Array.of(0));
+  expect(iterator.next().value).toEqual(Uint8Array.of(42));
+  iterator.return(undefined);
+});
+it.each([0, -1, NaN, Infinity])('rejects invalid block size %s', (size) => {
+  expect(() => sendPieces(ascii('a'), 'blocks', size).next()).toThrow(RangeError);
+  expect(() => countSendPieces(ascii('a'), 'lines', size)).toThrow(RangeError);
 });

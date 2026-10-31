@@ -4,7 +4,7 @@ import { formatCount } from '@shared/i18n';
 import {
   estimateSeconds,
   MAX_SEND_FILE_BYTES,
-  splitForSending,
+  countSendPieces,
   type FileSendMode,
 } from '@shared/core/filesend';
 import type { BinaryFile } from '@shared/ipc';
@@ -27,7 +27,7 @@ export function SendFileDialog({ onClose }: { onClose: () => void }): ReactNode 
   const abort = useRef<AbortController | null>(null);
 
   const pieces = useMemo(
-    () => (file ? splitForSending(file.data, cfg.mode, cfg.blockSize).length : 0),
+    () => (file ? countSendPieces(file.data, cfg.mode, cfg.blockSize) : 0),
     [file, cfg.mode, cfg.blockSize],
   );
   const set = (patch: Partial<typeof cfg>): void =>
