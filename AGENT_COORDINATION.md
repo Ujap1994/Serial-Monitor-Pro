@@ -65,3 +65,8 @@ Checks run locally (macOS): `npm run check` passed – format, lint, types, 1089
 lines 96.74 %, build, 50 Electron E2E tests (3 hardware tests skipped). `npm run docs:screenshots`
 regenerated 29 images; all were inspected. No physical port was opened.
 Open: hardware/long-run acceptance, remaining ⚠️ parity items, CLI (not implemented).
+
+Published: CI on `main` (`da513e9`) passed on Linux, Windows and macOS –
+https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41251568652. Release workflow passed –
+https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41251988922. Release with 24 packages and
+SHA256SUMS: https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v1.1.0
