@@ -138,6 +138,7 @@ export function SendTablePage(): ReactNode {
                     <td>{c.name}</td>
                     <td>
                       <span className="badge">{c.fmt}</span>
+                      {c.addCrc && <span className="badge badge-crc">+CRC</span>}
                     </td>
                     <td className="data">{c.data}</td>
                     <td>{t(`newline.${c.newline}`)}</td>

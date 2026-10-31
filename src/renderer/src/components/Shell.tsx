@@ -1,6 +1,6 @@
 // Application frame: connection bar, tab bar and status bar.
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   Binary,
   Boxes,
@@ -288,28 +288,36 @@ export function TabBar(): ReactNode {
   const tab = useStore(appStore, (s) => s.tab);
   const busy = useStore(appStore, (s) => s.busyTabs);
   const dark = useStore(appStore, (s) => s.dark);
+  const tabsRef = useRef<HTMLElement>(null);
+  // Keep the active tab visible when the tab row has to scroll (narrow windows).
+  useEffect(() => {
+    tabsRef.current
+      ?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [tab]);
   return (
-    <nav className="tabbar" role="tablist">
-      {TABS.map((id, i) => {
-        const Icon = TAB_ICONS[id];
-        return (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            className="tab"
-            data-testid={`tab-${id}`}
-            aria-selected={tab === id}
-            title={i < 9 ? `Ctrl+${i + 1}` : 'Ctrl+0'}
-            onClick={() => setTab(id)}
-          >
-            <Icon size={15} strokeWidth={2.2} aria-hidden />
-            {t(`tab.${id}`)}
-            {busy.includes(id) && <span className="tab-dot" aria-label={t('common.running')} />}
-          </button>
-        );
-      })}
-      <span className="grow" />
+    <div className="tabbar">
+      <nav className="tabbar-tabs" role="tablist" ref={tabsRef}>
+        {TABS.map((id, i) => {
+          const Icon = TAB_ICONS[id];
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              className="tab"
+              data-testid={`tab-${id}`}
+              aria-selected={tab === id}
+              title={i < 9 ? `Ctrl+${i + 1}` : 'Ctrl+0'}
+              onClick={() => setTab(id)}
+            >
+              <Icon size={15} strokeWidth={2.2} aria-hidden />
+              {t(`tab.${id}`)}
+              {busy.includes(id) && <span className="tab-dot" aria-label={t('common.running')} />}
+            </button>
+          );
+        })}
+      </nav>
       <div className="tabbar-actions">
         <Button
           variant="ghost"
@@ -334,7 +342,7 @@ export function TabBar(): ReactNode {
           {t('menu.settings')}
         </Button>
       </div>
-    </nav>
+    </div>
   );
 }
 

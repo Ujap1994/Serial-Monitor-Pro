@@ -1,20 +1,24 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Eraser,
   FileUp,
   ListChecks,
   PanelLeftClose,
   PanelLeftOpen,
+  Repeat,
   Search,
   SendHorizontal,
+  ShieldCheck,
+  Square,
   SquareTerminal,
 } from 'lucide-react';
 import { NEWLINES, type Newline } from '@shared/core/commands';
 import { DATA_FORMATS, formatHexInput, type DataFormat } from '@shared/core/format';
-import { toHexString } from '@shared/core/bytes';
-import { monitorSendBytes } from '@shared/core/transmit-crc';
+import { PERIODIC_MAX_MS, PERIODIC_MIN_MS } from '@shared/core/settings';
+import { monitorPacket, type TransmitCrcConfig } from '@shared/core/transmit-crc';
 import { MonitorView } from '../components/LogView';
-import { Button, Card, Check, Input, Select } from '../components/ui';
+import { PacketPreview } from '../components/PacketPreview';
+import { Button, Card, Check, Input, NumberInput, Select } from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore, setTab, updateSettings } from '../state/app';
@@ -26,7 +30,9 @@ import {
   sendCommand,
   sendText,
   startFileLog,
+  startPeriodic,
   stopFileLog,
+  stopPeriodic,
 } from '../state/serial';
 
 /** Focus target for Ctrl+F. */
@@ -49,7 +55,10 @@ function QuickPanel(): ReactNode {
           >
             <SendHorizontal size={13} strokeWidth={2.2} aria-hidden />
             <span className="name">{c.name}</span>
-            <span className="fmt">{c.fmt}</span>
+            <span className="fmt">
+              {c.fmt}
+              {c.addCrc && ' +CRC'}
+            </span>
           </button>
         ))}
       </div>
@@ -83,6 +92,17 @@ function DisplayOptions({ shown, total, filter, setFilter }: DisplayOptionsProps
 
   return (
     <div className="opts">
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
+        icon={s.quickPanel ? PanelLeftClose : PanelLeftOpen}
+        title={s.quickPanel ? t('quick.hide') : t('quick.show')}
+        onClick={() => updateSettings({ quickPanel: !s.quickPanel })}
+        data-testid="toggle-quick"
+      >
+        {t('quick.title')}
+      </Button>
       <span className="toolbar-label">{t('monitor.display')}</span>
       <Select<DataFormat>
         value={s.display}
@@ -141,31 +161,32 @@ function DisplayOptions({ shown, total, filter, setFilter }: DisplayOptionsProps
       >
         {t('monitor.fileLog')}
       </Check>
-      <span className="grow" />
-      <div className="filter">
-        <Search size={14} strokeWidth={2.4} aria-hidden />
-        <Input
-          id={filterInputId}
-          data-testid="monitor-filter"
-          placeholder={t('monitor.filterPlaceholder')}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          onKeyDown={(e) => e.key === 'Escape' && setFilter('')}
-        />
+      <div className="opts-end">
+        <div className="filter">
+          <Search size={14} strokeWidth={2.4} aria-hidden />
+          <Input
+            id={filterInputId}
+            data-testid="monitor-filter"
+            placeholder={t('monitor.filterPlaceholder')}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && setFilter('')}
+          />
+        </div>
+        {filter && (
+          <span className="filter-count" data-testid="filter-count">
+            {t('monitor.filterCount', { shown, total })}
+          </span>
+        )}
+        <Button
+          size="sm"
+          icon={Eraser}
+          onClick={clearMonitor}
+          title={`${t('monitor.clear')} (Ctrl+L)`}
+        >
+          {t('monitor.clear')}
+        </Button>
       </div>
-      {filter && (
-        <span className="filter-count" data-testid="filter-count">
-          {t('monitor.filterCount', { shown, total })}
-        </span>
-      )}
-      <Button
-        size="sm"
-        icon={Eraser}
-        onClick={clearMonitor}
-        title={`${t('monitor.clear')} (Ctrl+L)`}
-      >
-        {t('monitor.clear')}
-      </Button>
     </div>
   );
 }
@@ -174,22 +195,32 @@ function SendBar(): ReactNode {
   const t = useT();
   const s = useStore(appStore, (st) => st.settings);
   const connected = useStore(appStore, (st) => st.connection === 'connected');
+  const periodic = useStore(appStore, (st) => st.busyTabs.includes('monitor'));
   const [text, setText] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const history = useRef<string[]>([]);
   const historyPos = useRef(-1);
+  const crc = s.transmitCrc;
+  const setCrc = (patch: Partial<TransmitCrcConfig>): void =>
+    updateSettings({ transmitCrc: { ...crc, ...patch } });
+  // Periodic sending reads the input before every send (like the Python version).
+  const latest = useRef({ text, fmt: s.sendFormat, newline: s.newline });
+  useEffect(() => {
+    latest.current = { text, fmt: s.sendFormat, newline: s.newline };
+  }, [text, s.sendFormat, s.newline]);
+
+  const framed = crc.enabled || crc.useHeader || crc.useFooter;
   const preview = useMemo(() => {
     try {
-      return {
-        text: toHexString(monitorSendBytes(text, s.sendFormat, s.newline, s.transmitCrc)),
-        error: false,
-      };
+      return { packet: monitorPacket(text, s.sendFormat, s.newline, crc), error: '' };
     } catch (err) {
-      return { text: err instanceof Error ? err.message : String(err), error: true };
+      return { packet: null, error: err instanceof Error ? err.message : String(err) };
     }
-  }, [text, s.sendFormat, s.newline, s.transmitCrc]);
+  }, [text, s.sendFormat, s.newline, crc]);
 
   const hexOptions = { uppercase: s.hexUppercase, group: s.hexGroup, groupSize: s.hexGroupSize };
+  const hexField = (value: string): string =>
+    s.sendFormat === 'HEX' ? formatHexInput(value, -1, hexOptions).text : value;
 
   const applyHex = (value: string, caret: number): void => {
     const out = formatHexInput(value, caret, hexOptions);
@@ -205,36 +236,19 @@ function SendBar(): ReactNode {
       history.current.splice(0, history.current.length - 50);
     }
     historyPos.current = -1;
-    if (s.clearAfterSend) setText('');
+    if (s.clearAfterSend && !periodic) setText('');
     else input.current?.select();
   };
 
   return (
-    <div>
-      <div className="row" style={{ marginBottom: 6 }}>
-        <Check
-          checked={s.transmitCrc.enabled}
-          onChange={(enabled) => updateSettings({ transmitCrc: { ...s.transmitCrc, enabled } })}
-          testId="monitor-crc-auto"
-        >
-          {t('crc.autoShort')}
-        </Check>
-        <Button size="sm" onClick={() => setTab('crc')}>
-          {t('crc.settings')}
-        </Button>
-        {s.transmitCrc.enabled && (
-          <span className="muted small">
-            {s.transmitCrc.algorithm} · {s.transmitCrc.bigEndian ? 'BE' : 'LE'} ·{' '}
-            {t('crc.position')} {s.transmitCrc.position}
-          </span>
-        )}
-      </div>
-      <div className="sendbar">
+    <div className="sendarea" data-testid="sendarea">
+      <div className="sendarea-row">
         <span className="toolbar-label">{t('monitor.send')}</span>
         <Select<DataFormat>
           value={s.sendFormat}
           options={DATA_FORMATS}
           data-testid="send-format"
+          title={t('command.format')}
           style={{ width: 86 }}
           onChange={(sendFormat) => {
             updateSettings({ sendFormat });
@@ -242,9 +256,90 @@ function SendBar(): ReactNode {
               setText(formatHexInput(text, -1, hexOptions).text);
           }}
         />
+        <span className="toolbar-label muted">{t('monitor.newline')}</span>
+        <Select<Newline>
+          value={s.newline}
+          options={NEWLINES.map((n) => ({ value: n, label: t(`newline.${n}`) }))}
+          onChange={(newline) => updateSettings({ newline })}
+          data-testid="send-newline"
+          style={{ width: 104 }}
+        />
+        <span className="divider-v" />
+        <Check
+          checked={crc.enabled}
+          onChange={(enabled) => setCrc({ enabled })}
+          title={t('crc.addTip')}
+          testId="monitor-crc-auto"
+        >
+          {t('crc.add')}
+        </Check>
+        <Check
+          checked={crc.useHeader}
+          onChange={(useHeader) => setCrc({ useHeader })}
+          title={t('crc.useHeaderTip')}
+          testId="monitor-use-header"
+        >
+          {t('crc.header')}
+        </Check>
+        <Check
+          checked={crc.useFooter}
+          onChange={(useFooter) => setCrc({ useFooter })}
+          title={t('crc.useFooterTip')}
+          testId="monitor-use-footer"
+        >
+          {t('crc.footer')}
+        </Check>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={ShieldCheck}
+          onClick={() => setTab('crc')}
+          data-testid="monitor-crc-settings"
+        >
+          {t('crc.settings')}
+        </Button>
+        <span className="grow" />
+        <span className="toolbar-label muted" title={t('periodic.tip')}>
+          {t('periodic.label')}
+        </span>
+        <NumberInput
+          value={s.periodicMs}
+          min={PERIODIC_MIN_MS}
+          max={PERIODIC_MAX_MS}
+          onChange={(periodicMs) => updateSettings({ periodicMs })}
+          title={t('periodic.tip')}
+          data-testid="periodic-ms"
+          style={{ width: 92 }}
+        />
+        <Button
+          size="sm"
+          variant={periodic ? 'danger' : 'default'}
+          icon={periodic ? Square : Repeat}
+          data-testid="periodic-toggle"
+          title={t('periodic.tip')}
+          onClick={() => {
+            if (periodic) stopPeriodic();
+            else void startPeriodic(() => latest.current);
+          }}
+        >
+          {periodic ? t('periodic.stop') : t('periodic.start')}
+        </Button>
+      </div>
+      <div className="sendarea-row">
+        <Input
+          mono
+          className="framing-input"
+          value={crc.header}
+          placeholder={t('crc.header')}
+          title={t('crc.useHeaderTip')}
+          disabled={!crc.useHeader}
+          onChange={(e) => setCrc({ header: hexField(e.target.value) })}
+          data-testid="monitor-header"
+        />
         <Input
           ref={input}
           mono
+          className="send-input"
           data-testid="send-input"
           value={text}
           placeholder={
@@ -274,19 +369,22 @@ function SendBar(): ReactNode {
             }
           }}
         />
-        <span className="toolbar-label muted">{t('monitor.newline')}</span>
-        <Select<Newline>
-          value={s.newline}
-          options={NEWLINES.map((n) => ({ value: n, label: t(`newline.${n}`) }))}
-          onChange={(newline) => updateSettings({ newline })}
-          style={{ width: 104 }}
+        <Input
+          mono
+          className="framing-input"
+          value={crc.footer}
+          placeholder={t('crc.footer')}
+          title={t('crc.useFooterTip')}
+          disabled={!crc.useFooter}
+          onChange={(e) => setCrc({ footer: hexField(e.target.value) })}
+          data-testid="monitor-footer"
         />
         <Button
           variant="success"
           icon={SendHorizontal}
           onClick={() => void send()}
           data-testid="send-button"
-          disabled={preview.error}
+          disabled={Boolean(preview.error)}
         >
           {t('monitor.sendButton')}
         </Button>
@@ -299,13 +397,26 @@ function SendBar(): ReactNode {
           {t('monitor.sendFile')}
         </Button>
       </div>
-      {s.transmitCrc.enabled && (
-        <div
-          className={preview.error ? 'notice' : 'muted small mono selectable'}
-          data-testid="send-preview"
-          style={{ overflowWrap: 'anywhere', maxHeight: 60, overflow: 'auto', marginTop: 6 }}
-        >
-          {t('crc.wirePreview')}: {preview.text || '—'}
+      {framed && (
+        <div className={preview.error ? 'notice' : 'send-preview'} data-testid="send-preview">
+          {preview.error ? (
+            preview.error
+          ) : (
+            <>
+              <span className="muted">{t('crc.wirePreview')}:</span>{' '}
+              {preview.packet ? (
+                <PacketPreview packet={preview.packet} />
+              ) : (
+                <span className="muted">—</span>
+              )}
+              {crc.enabled && (
+                <span className="muted send-preview-meta">
+                  {crc.algorithm} · {crc.bigEndian ? 'BE' : 'LE'} · {t('crc.position')}{' '}
+                  {crc.position}
+                </span>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -353,20 +464,7 @@ export function MonitorPage(): ReactNode {
           filter={filter}
           setFilter={setFilter}
         />
-        <div className="row nowrap">
-          <Button
-            variant="ghost"
-            iconOnly
-            icon={s.quickPanel ? PanelLeftClose : PanelLeftOpen}
-            title={s.quickPanel ? t('quick.hide') : t('quick.show')}
-            onClick={() => updateSettings({ quickPanel: !s.quickPanel })}
-          >
-            {t('quick.title')}
-          </Button>
-          <div className="grow">
-            <SendBar />
-          </div>
-        </div>
+        <SendBar />
       </div>
     </div>
   );

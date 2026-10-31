@@ -163,6 +163,9 @@ export const de = {
   'command.delay': 'Pause danach',
   'command.delayHint': 'Wartezeit in ms, wenn Befehle als Folge gesendet werden',
   'command.willSend': 'Wird gesendet',
+  'command.addCrc': 'CRC anhängen',
+  'command.addCrcHint':
+    'Verfahren, Byte-Reihenfolge und Position aus „CRC-Werkzeuge“ – ohne Header/Footer.',
   'command.nameMissing': 'Name fehlt',
   'command.importInvalid': 'Die Datei enthält keine Befehlsliste.',
 
@@ -174,6 +177,9 @@ export const de = {
   'presets.empty': 'Noch keine Befehle – mit „Neu“ den ersten anlegen.',
   'presets.noneSelected': 'Links einen Befehl auswählen.',
   'presets.inTable': 'In Tabelle',
+  'presets.crc': 'CRC',
+  'presets.crcOn': 'wird angehängt ({algorithm})',
+  'presets.crcOff': 'nein',
   'presets.active': 'aktiv',
   'presets.skipped': 'übersprungen',
   'presets.sendSelected': 'Ausgewählten Befehl senden',
@@ -220,12 +226,40 @@ export const de = {
   // CRC
   'crc.title': 'CRC-Werkzeuge',
   'crc.description':
-    '11 gängige Prüfsummenverfahren – berechnen, vergleichen und an Daten anhängen.',
-  'crc.input': 'Daten',
+    '11 gängige Prüfsummenverfahren – berechnen, vergleichen und beim Senden automatisch einfügen.',
+  'crc.txTitle': 'CRC-Einstellungen (Senden)',
+  'crc.calcTitle': 'CRC-Rechner',
   'crc.algorithm': 'Verfahren',
+  'crc.endian': 'Byte-Reihenfolge',
+  'crc.position': 'Position',
+  'crc.positionHint':
+    '0 = hinten anhängen · 1 = die CRC wird das 2. Byte · −1 = vor dem letzten Byte (vorletzte Stelle) · −2 = vor dem vorletzten Byte. Gezählt wird in den Daten zwischen Header und Footer.',
+  'crc.includeHeader': 'Header in CRC einbeziehen',
+  'crc.includeFooter': 'Footer in CRC einbeziehen',
+  'crc.auto': 'CRC beim Senden im Monitor automatisch berechnen und einfügen',
+  'crc.add': 'CRC hinzufügen',
+  'crc.addTip':
+    'Berechnet die CRC für jede Monitor-Eingabe und fügt sie an der Position aus „CRC-Werkzeuge“ ein',
+  'crc.header': 'Header',
+  'crc.footer': 'Footer',
+  'crc.useHeaderTip': 'Header vor jede Monitor-Eingabe setzen',
+  'crc.useFooterTip': 'Footer hinter jede Monitor-Eingabe setzen (vor dem Zeilenende)',
+  'crc.framing': 'Header/Footer – festgelegt im Monitor, im selben Format wie die Eingabe',
+  'crc.framingOn': 'an',
+  'crc.framingOff': 'aus',
+  'crc.framingEmpty': 'leer',
+  'crc.toMonitor': 'Zum Monitor',
+  'crc.params': 'CRC-Parameter',
+  'crc.note':
+    'Die CRC wird über die Datenbytes berechnet – ohne die CRC-Bytes selbst und ohne Zeilenende. Big-Endian: höchstwertiges Byte zuerst (0x1234 → 12 34). Little-Endian: niederwertiges Byte zuerst (0x1234 → 34 12).',
+  'crc.example': 'Sendebeispiel mit den Daten aus dem Rechner',
+  'crc.exampleEmpty':
+    'Im Rechner Daten eingeben – hier erscheint dann das Paket, wie es der Monitor senden würde.',
+  'crc.scope':
+    'Gilt für die Monitor-Eingabe, auch beim periodischen Senden. Presets erhalten eine CRC nur mit „CRC anhängen“ im jeweiligen Befehl – dann ohne Header/Footer.',
+  'crc.inputFormat': 'Eingabe-Format',
   'crc.data': 'Daten',
   'crc.placeholder': 'z. B. 01 03 00 00 00 0A',
-  'crc.single': 'Berechnen',
   'crc.compareAll': 'Alle Verfahren vergleichen',
   'crc.checkVector': 'Prüfvektor „123456789“',
   'crc.checkVectorTip': 'Standard-Testfolge zum Vergleich mit Datenblättern',
@@ -234,28 +268,17 @@ export const de = {
   'crc.width': 'Breite',
   'crc.bytesBe': 'Bytes Big-Endian',
   'crc.bytesLe': 'Bytes Little-Endian',
-  'crc.withCrc': 'Telegramm mit eingefügter Prüfsumme (HEX)',
-  'crc.endian': 'CRC-Byte-Reihenfolge',
-  'crc.position': 'Einfügeposition',
-  'crc.header': 'Vorhandener Header (HEX)',
-  'crc.footer': 'Vorhandener Footer (HEX)',
-  'crc.includeHeader': 'Header in CRC einbeziehen',
-  'crc.includeFooter': 'Footer in CRC einbeziehen',
-  'crc.positionHint':
-    '0 = anhängen; 1 = vor dem zweiten Byte; -1 = vor dem vorletzten Byte. Einfügen ergänzt Bytes und ersetzt sie nicht.',
-  'crc.framingHint':
-    'Header/Footer müssen bereits an den Enden der Eingabe stehen. Bei Nichtverwendung leer lassen.',
-  'crc.auto': 'CRC für die Monitor-Eingabe automatisch berechnen und einfügen',
-  'crc.autoShort': 'Automatische CRC',
-  'crc.scope':
-    'Gilt nur für die Monitor-Eingabe. Vorlagen, Sendetabelle, Automation und Dateien behalten ihre eigenen Bytes. Der gewählte Monitor-Zeilenabschluss wird danach angehängt und zählt weder zur CRC noch zur Position.',
+  'crc.dataBe': 'Daten + CRC (Big-Endian)',
+  'crc.dataLe': 'Daten + CRC (Little-Endian)',
+  'crc.covered': 'CRC berechnet über',
   'crc.settings': 'CRC-Einstellungen',
-  'crc.covered': 'CRC-Berechnungsbereich (HEX)',
-  'crc.wirePreview': 'Sendebytes (HEX, inklusive Zeilenabschluss)',
-  'crc.positionError':
-    'CRC-Position {position} liegt außerhalb des {length}-Byte-Telegramms oder ist keine ganze Zahl.',
-  'crc.framingError':
-    'Header/Footer passen nicht zu den Telegrammenden oder überlappen sich. Eingabe und Rahmenfelder prüfen.',
+  'crc.wirePreview': 'Sendebytes (HEX)',
+  'crc.part.header': 'Header',
+  'crc.part.data': 'Daten',
+  'crc.part.crc': 'CRC',
+  'crc.part.footer': 'Footer',
+  'crc.part.newline': 'Zeilenende',
+  'crc.positionError': 'CRC-Position {position} liegt außerhalb der {length} Datenbytes.',
   'crc.algorithmError': 'Unbekannter CRC-Algorithmus.',
 
   // Stopp-Bedingung
@@ -627,6 +650,18 @@ export const de = {
   'sendfile.estimate': '{pieces} Teile · mindestens {seconds} s',
   'sendfile.hint':
     'Bytes werden unverändert gesendet, ohne automatische CRC oder zusätzliche Zeilenabschlüsse. Lange Zeilen werden bei der Blockgröße geteilt; es gibt kein Bestätigungsprotokoll. Abbrechen oder Schließen trennt die Verbindung. Bereits gesendete Bytes lassen sich nicht zurückholen.',
+  'periodic.label': 'Periodisch (ms)',
+  'periodic.start': 'Periodisch starten',
+  'periodic.stop': 'Periodisch stoppen',
+  'periodic.tip':
+    'Sendet die Eingabe immer wieder – Pause nach jedem Senden in ms (10 bis 3 600 000). Änderungen an der Eingabe gelten sofort.',
+  'periodic.started': 'Periodisches Senden gestartet (Pause {ms} ms)',
+  'periodic.stopped': 'Periodisches Senden beendet: {reason}',
+  'periodic.reason.manual': 'von Hand',
+  'periodic.reason.disconnected': 'Verbindung getrennt',
+  'periodic.reason.invalid': 'Eingabe ungültig',
+  'periodic.reason.empty': 'Eingabe leer',
+  'periodic.reason.failed': 'Senden fehlgeschlagen',
   'sendfile.busy':
     'Ein anderer Sendevorgang läuft. Diesen vor dem Dateiversand oder einem weiteren Befehl beenden.',
   'sendfile.start': 'Senden',

@@ -25,6 +25,25 @@ const LEGACY_FILES: Record<StoreName, string> = {
   automation: 'automation.json',
 };
 
+const LEGACY_CTK_SETTINGS = 'serial_monitor_settings.json';
+
+async function readLegacy(name: string): Promise<unknown> {
+  const file = join(LEGACY_DIR, name);
+  try {
+    const data = JSON.parse(await readFile(file, 'utf8')) as unknown;
+    console.info(`[storage] imported ${file}`);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 export class Storage {
   constructor(private readonly dir: string) {}
 
@@ -47,14 +66,13 @@ export class Storage {
 
   private async loadLegacy(name: StoreName): Promise<unknown> {
     if (process.env.SMP_NO_LEGACY_IMPORT) return null;
-    const file = join(LEGACY_DIR, LEGACY_FILES[name]);
-    try {
-      const data = JSON.parse(await readFile(file, 'utf8')) as unknown;
-      console.info(`[storage] imported ${file}`);
-      return name === 'settings' ? migrateLegacySettings(data) : data;
-    } catch {
-      return null;
-    }
+    const data = await readLegacy(LEGACY_FILES[name]);
+    if (name !== 'settings') return data;
+    // The CustomTkinter version kept transmit options (CRC, header/footer,
+    // periodic sending) in its own file; the PySide version's file wins on overlap.
+    const older = await readLegacy(LEGACY_CTK_SETTINGS);
+    if (data === null && older === null) return null;
+    return migrateLegacySettings({ ...asObject(older), ...asObject(data) });
   }
 
   async save(name: StoreName, data: unknown): Promise<boolean> {

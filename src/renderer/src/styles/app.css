@@ -108,11 +108,52 @@ button {
 .page-crc {
   overflow: auto;
 }
-.page-crc > .card {
-  flex-shrink: 0;
+.crc-layout {
+  display: grid;
+  grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.15fr);
+  gap: 10px;
+  align-items: start;
+  flex: 1 0 auto;
 }
-.page-crc > .card-fill {
-  min-height: 250px;
+.crc-tx > .card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.crc-calc {
+  min-height: 100%;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+.framing-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.crc-params {
+  display: grid;
+  grid-template-columns: repeat(3, auto minmax(0, 1fr));
+  gap: 3px 10px;
+}
+.crc-params span {
+  color: var(--muted);
+}
+.crc-params b {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.crc-tx p,
+.crc-calc p {
+  margin: 0;
 }
 
 .page-header {
@@ -252,14 +293,22 @@ button {
 /* ── Tabs ─────────────────────────────────────────────────────────────────── */
 .tabbar {
   display: flex;
-  gap: 2px;
+  align-items: flex-end;
+  gap: 6px;
   padding: 6px 10px 0;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+/* Only the tabs scroll; theme and settings stay reachable at every width. */
+.tabbar-tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.tabbar::-webkit-scrollbar {
+.tabbar-tabs::-webkit-scrollbar {
   display: none;
 }
 .tab {
@@ -297,8 +346,24 @@ button {
 .tabbar-actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 2px;
   padding-bottom: 4px;
+}
+@media (max-width: 1500px) {
+  .tab {
+    gap: 5px;
+    padding: 0 9px;
+  }
+}
+@media (max-width: 1240px) {
+  .tab {
+    padding: 0 7px;
+    font-size: 12.5px;
+  }
+  .tab > svg {
+    display: none;
+  }
 }
 .tab .tab-dot {
   width: 6px;
@@ -601,7 +666,26 @@ textarea.input {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 10px 14px;
-  align-items: end;
+  /* Labels share one line and inputs another; hints hang below their input. */
+  align-items: start;
+}
+.form-grid > .check,
+.form-grid > .switch,
+.form-grid > .btn {
+  align-self: end;
+  min-height: var(--control-h);
+}
+.form-grid.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.form-grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.span-2 {
+  grid-column: span 2;
+}
+.span-3 {
+  grid-column: span 3;
 }
 
 /* ── Cards / panels ───────────────────────────────────────────────────────── */
@@ -693,6 +777,10 @@ textarea.input {
   font-weight: 650;
   background: var(--surface-3);
   color: var(--muted);
+}
+.badge-crc {
+  background: var(--primary-soft);
+  color: var(--primary-text);
 }
 .badge-ok {
   background: var(--success-soft);
@@ -912,9 +1000,20 @@ kbd,
   color: var(--faint);
   pointer-events: none;
 }
+.opts-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
 .opts .filter .input {
   padding-left: 30px;
-  width: 210px;
+  width: 170px;
+  transition: width 0.15s;
+}
+.opts .filter .input:focus,
+.opts .filter .input:not(:placeholder-shown) {
+  width: 230px;
 }
 .opts .filter-count {
   font-size: 11.5px;
@@ -922,22 +1021,95 @@ kbd,
   white-space: nowrap;
 }
 
-.sendbar {
+.sendarea {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   padding: 8px 10px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  min-width: 0;
 }
-.sendbar .input.mono {
+.sendarea-row {
+  display: flex;
+  align-items: center;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.sendarea-row + .sendarea-row {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.sendarea .send-input {
   flex: 1 1 auto;
+  min-width: 120px;
   height: 34px;
 }
-.sendbar .btn-success {
+.sendarea .framing-input {
+  flex: 0 1 130px;
+  min-width: 70px;
+  height: 34px;
+}
+.sendarea .framing-input:disabled {
+  opacity: 0.45;
+}
+.sendarea .btn-success {
   height: 34px;
   min-width: 108px;
+}
+.send-preview {
+  font-size: 12px;
+  max-height: 60px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.send-preview-meta {
+  margin-left: 12px;
+}
+
+/* ── Packet parts (header, data, CRC, footer, line ending) ─────────────────── */
+.packet {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.pk-data {
+  color: var(--text);
+}
+.pk-header,
+.pk-footer {
+  color: var(--violet);
+}
+.pk-crc {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  font-weight: 700;
+}
+.pk-newline {
+  color: var(--faint);
+}
+.packet-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.packet-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 11.5px;
+}
+.packet-legend .pk {
+  font-weight: 600;
 }
 
 /* ── Lists & tables ───────────────────────────────────────────────────────── */

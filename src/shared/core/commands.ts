@@ -4,20 +4,10 @@
 import { t } from '../i18n';
 import { concatBytes, hex2 } from './bytes';
 import { InputError, isDataFormat, parseSendData, type DataFormat } from './format';
+import { isNewline, NEWLINE_BYTES, type Newline } from './newline';
+import { DEFAULT_TRANSMIT_CRC, insertCrc, type TransmitCrcConfig } from './transmit-crc';
 
-export const NEWLINES = ['None', 'LF', 'CR', 'CRLF'] as const;
-export type Newline = (typeof NEWLINES)[number];
-
-export const NEWLINE_BYTES: Record<Newline, Uint8Array> = {
-  None: new Uint8Array(),
-  LF: Uint8Array.of(0x0a),
-  CR: Uint8Array.of(0x0d),
-  CRLF: Uint8Array.of(0x0d, 0x0a),
-};
-
-export function isNewline(value: unknown): value is Newline {
-  return typeof value === 'string' && (NEWLINES as readonly string[]).includes(value);
-}
+export { isNewline, NEWLINE_BYTES, NEWLINES, type Newline } from './newline';
 
 export interface Command {
   name: string;
@@ -28,22 +18,47 @@ export interface Command {
   delayMs: number;
   /** Taken into account by the send table. */
   enabled: boolean;
+  /**
+   * Append the CRC configured in the CRC tab (algorithm, byte order, position) –
+   * "Add CRC" of the former Python presets. Header/footer of the Monitor are not added.
+   */
+  addCrc: boolean;
 }
 
 export function newCommand(partial: Partial<Command> = {}): Command {
-  return { name: '', data: '', fmt: 'HEX', newline: 'LF', delayMs: 200, enabled: true, ...partial };
+  return {
+    name: '',
+    data: '',
+    fmt: 'HEX',
+    newline: 'LF',
+    delayMs: 200,
+    enabled: true,
+    addCrc: false,
+    ...partial,
+  };
 }
 
-/** Final bytes including the line ending. Throws {@link InputError}. */
-export function commandBytes(cmd: Command): Uint8Array {
-  return concatBytes(parseSendData(cmd.data, cmd.fmt), NEWLINE_BYTES[cmd.newline]);
+/**
+ * Final bytes including the CRC (when the command asks for it) and the line
+ * ending. Throws {@link InputError}.
+ */
+export function commandBytes(
+  cmd: Command,
+  crc: Readonly<TransmitCrcConfig> = DEFAULT_TRANSMIT_CRC,
+): Uint8Array {
+  let data = parseSendData(cmd.data, cmd.fmt);
+  if (cmd.addCrc && data.length) data = insertCrc(data, crc).data;
+  return concatBytes(data, NEWLINE_BYTES[cmd.newline]);
 }
 
 /** Short preview of the bytes that will actually be sent. */
-export function commandPreview(cmd: Command): string {
+export function commandPreview(
+  cmd: Command,
+  crc: Readonly<TransmitCrcConfig> = DEFAULT_TRANSMIT_CRC,
+): string {
   let raw: Uint8Array;
   try {
-    raw = commandBytes(cmd);
+    raw = commandBytes(cmd, crc);
   } catch (err) {
     return `⚠ ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -52,10 +67,13 @@ export function commandPreview(cmd: Command): string {
   return `${shown}${raw.length > 12 ? ' …' : ''}   (${raw.length} B)`;
 }
 
-export function validateCommand(cmd: Command): { ok: boolean; error: string } {
+export function validateCommand(
+  cmd: Command,
+  crc: Readonly<TransmitCrcConfig> = DEFAULT_TRANSMIT_CRC,
+): { ok: boolean; error: string } {
   if (!cmd.name.trim()) return { ok: false, error: t('command.nameMissing') };
   try {
-    commandBytes(cmd);
+    commandBytes(cmd, crc);
   } catch (err) {
     return { ok: false, error: err instanceof InputError ? err.message : String(err) };
   }
@@ -74,7 +92,7 @@ function int(value: unknown, fallback: number): number {
 
 /**
  * Normalises one command from a file. Accepts the field names of the former
- * Python version (`delay_ms`) as well, so existing exports keep working.
+ * Python version (`delay_ms`, `add_crc`) as well, so existing exports keep working.
  */
 export function normalizeCommand(value: unknown): Command {
   const d = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
@@ -85,6 +103,7 @@ export function normalizeCommand(value: unknown): Command {
     newline: isNewline(d.newline) ? d.newline : 'LF',
     delayMs: int(d.delayMs ?? d.delay_ms, 200),
     enabled: typeof d.enabled === 'boolean' ? d.enabled : true,
+    addCrc: (d.addCrc ?? d.add_crc) === true,
   };
 }
 

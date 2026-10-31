@@ -108,6 +108,7 @@ export function AutomationPage(): ReactNode {
             newline: step.newline,
             delayMs: 0,
             enabled: true,
+            addCrc: false,
           },
           true,
         );

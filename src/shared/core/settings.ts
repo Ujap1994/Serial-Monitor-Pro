@@ -1,7 +1,7 @@
 // Persistent user settings with defaults and validation.
 
 import type { LanguageSetting } from '../i18n';
-import { isNewline, type Newline } from './commands';
+import { isNewline, type Newline } from './newline';
 import { CRC_NAMES } from './crc';
 import type { FileSendMode } from './filesend';
 import { isDataFormat, type DataFormat } from './format';
@@ -14,6 +14,10 @@ export const BAUD_RATES = [
   300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 74880, 115200, 230400, 250000, 460800, 500000,
   921600, 1000000, 2000000,
 ] as const;
+/** Limits of periodic sending in the Monitor (ms). */
+export const PERIODIC_MIN_MS = 10;
+export const PERIODIC_MAX_MS = 3_600_000;
+
 export const DATA_BITS = [5, 6, 7, 8] as const;
 export const PARITIES = ['None', 'Even', 'Odd', 'Mark', 'Space'] as const;
 export const STOP_BITS = ['1', '1.5', '2'] as const;
@@ -98,6 +102,8 @@ export interface Settings {
   graph: GraphConfig;
   fileSend: FileSendConfig;
   transmitCrc: TransmitCrcConfig;
+  /** Interval of periodic sending in the Monitor. */
+  periodicMs: number;
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
@@ -148,6 +154,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
   graph: { mode: 'auto', separator: ',', points: 500 },
   fileSend: { mode: 'blocks', blockSize: 64, pauseMs: 10 },
   transmitCrc: { ...DEFAULT_TRANSMIT_CRC },
+  periodicMs: 1000,
 });
 
 type Dict = Record<string, unknown>;
@@ -240,11 +247,14 @@ export function normalizeSettings(raw: unknown): Settings {
         typeof c.position === 'number' && Number.isFinite(c.position)
           ? c.position
           : D.transmitCrc.position,
-      header: str(c.header, ''),
-      footer: str(c.footer, ''),
-      includeHeader: bool(c.includeHeader, true),
-      includeFooter: bool(c.includeFooter, true),
+      useHeader: bool(c.useHeader, D.transmitCrc.useHeader),
+      header: str(c.header, D.transmitCrc.header),
+      useFooter: bool(c.useFooter, D.transmitCrc.useFooter),
+      footer: str(c.footer, D.transmitCrc.footer),
+      includeHeader: bool(c.includeHeader, D.transmitCrc.includeHeader),
+      includeFooter: bool(c.includeFooter, D.transmitCrc.includeFooter),
     },
+    periodicMs: int(s.periodicMs, D.periodicMs, PERIODIC_MIN_MS, PERIODIC_MAX_MS),
   };
 }
 
@@ -272,7 +282,7 @@ export function migrateLegacySettings(raw: unknown): Settings {
     display: s.display,
     timestamp: s.timestamp,
     timestampFormat: LEGACY_TIMESTAMPS[String(s.timestamp_format)],
-    autoscroll: s.autoscroll,
+    autoscroll: s.autoscroll ?? s.auto_scroll,
     utf8: s.utf8,
     showCrlf: s.show_crlf,
     deltaTime: s.deltatime,
@@ -289,5 +299,32 @@ export function migrateLegacySettings(raw: unknown): Settings {
     clearAfterSend: s.clear_after_send,
     echoSent: s.echo_sent,
     language: s.language,
+    // CustomTkinter version (serial_monitor_settings.json)
+    transmitCrc: {
+      enabled: s.crc_on,
+      algorithm: s.crc_method,
+      bigEndian: typeof s.crc_endian === 'string' ? s.crc_endian !== 'Little-Endian' : undefined,
+      position: legacyCrcPosition(s.crc_position, s.crc_index),
+      useHeader: s.use_header,
+      header: s.header,
+      useFooter: s.use_footer,
+      footer: s.footer,
+      includeHeader: s.crc_include_header,
+      includeFooter: s.crc_include_footer,
+    },
+    periodicMs: s.periodic_ms,
   });
+}
+
+/**
+ * The Python version knew "Append" and "Insert at index" with a separate
+ * index (0 = in front of the data). Here 0 means "append"; inserting in front
+ * of everything is the negative data length, which cannot be stored without
+ * the data – such a setting falls back to "append".
+ */
+function legacyCrcPosition(mode: unknown, index: unknown): number | undefined {
+  if (mode === 'Append') return 0;
+  if (mode !== 'Insert at index') return undefined;
+  const n = Number(index);
+  return Number.isSafeInteger(n) && n !== 0 ? n : 0;
 }

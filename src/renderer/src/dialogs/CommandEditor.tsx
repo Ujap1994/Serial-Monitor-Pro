@@ -10,8 +10,10 @@ import {
 } from '@shared/core/commands';
 import { DATA_FORMATS, type DataFormat } from '@shared/core/format';
 import { Modal } from '../components/Modal';
-import { Button, Field, Input, NumberInput, Select } from '../components/ui';
+import { Button, Check, Field, Input, NumberInput, Select } from '../components/ui';
 import { useT } from '../lib/i18n';
+import { useStore } from '../lib/store';
+import { appStore } from '../state/app';
 
 interface Props {
   command?: Command;
@@ -23,6 +25,7 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
   const t = useT();
   const [cmd, setCmd] = useState<Command>(() => ({ ...newCommand(), ...command }));
   const [error, setError] = useState('');
+  const crc = useStore(appStore, (s) => s.settings.transmitCrc);
   const update = (patch: Partial<Command>): void => {
     setCmd((c) => ({ ...c, ...patch }));
     setError('');
@@ -30,7 +33,7 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
 
   const save = (): void => {
     const trimmed = { ...cmd, name: cmd.name.trim() };
-    const result = validateCommand(trimmed);
+    const result = validateCommand(trimmed, crc);
     if (!result.ok) {
       setError(result.error);
       return;
@@ -102,12 +105,24 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
             onChange={(delayMs) => update({ delayMs })}
           />
         </Field>
+        <div className="field">
+          <span>CRC</span>
+          <Check
+            checked={cmd.addCrc}
+            onChange={(addCrc) => update({ addCrc })}
+            testId="command-add-crc"
+            title={t('command.addCrcHint')}
+          >
+            {t('command.addCrc')} ({crc.algorithm})
+          </Check>
+          <small className="field-hint">{t('command.addCrcHint')}</small>
+        </div>
         <button type="submit" hidden />
       </form>
       <div>
         <div className="section-title">{t('command.willSend')}</div>
         <div className="preview" data-testid="command-preview">
-          {commandPreview(cmd)}
+          {commandPreview(cmd, crc)}
         </div>
       </div>
       {error && <div className="notice">{error}</div>}

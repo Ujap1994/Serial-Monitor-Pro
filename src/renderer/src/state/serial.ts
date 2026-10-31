@@ -24,7 +24,7 @@ import {
   type RenderOptions,
 } from '../lib/monitor';
 import { Emitter } from '../lib/store';
-import { appStore, setStatus, updateSettings } from './app';
+import { appStore, setBusy, setStatus, updateSettings } from './app';
 import { alertDialog } from './ui';
 
 export const MAIN = 'main';
@@ -292,6 +292,7 @@ function onMainEvent(event: SerialEvent): void {
   }
   // closed
   flushPending();
+  stopPeriodic('disconnected');
   const wasConnected = appStore.get().connection === 'connected';
   if (event.lost && wasConnected) {
     const detail = event.error ? ` (${event.error})` : '';
@@ -387,7 +388,9 @@ export async function sendFile(
   if (
     fileSending ||
     activeWrites ||
-    appStore.get().busyTabs.some((tab) => tab === 'automation' || tab === 'sendtable')
+    appStore
+      .get()
+      .busyTabs.some((tab) => tab === 'automation' || tab === 'sendtable' || tab === 'monitor')
   ) {
     setStatus(t('sendfile.busy'), 'warn');
     return 'failed';
@@ -521,7 +524,7 @@ export async function sendCommand(cmd: Command, quiet = false): Promise<boolean>
   }
   let data: Uint8Array;
   try {
-    data = commandBytes(cmd);
+    data = commandBytes(cmd, appStore.get().settings.transmitCrc);
   } catch (err) {
     if (!quiet) {
       const message = err instanceof Error ? err.message : String(err);
@@ -535,4 +538,80 @@ export async function sendCommand(cmd: Command, quiet = false): Promise<boolean>
   }
   if (!data.length) return false;
   return write(data, cmd.fmt, cmd.name);
+}
+
+// ── Periodic sending (Monitor) ───────────────────────────────────────────────
+export type PeriodicStop = 'manual' | 'disconnected' | 'invalid' | 'empty' | 'failed';
+
+export interface PeriodicInput {
+  text: string;
+  fmt: DataFormat;
+  newline: Newline;
+}
+
+let periodicTimer: ReturnType<typeof setTimeout> | null = null;
+let periodicRun = 0;
+
+export function isPeriodicRunning(): boolean {
+  return appStore.get().busyTabs.includes('monitor');
+}
+
+/**
+ * Sends the Monitor input again and again, like "Periodic" of the Python
+ * version. The input is read before every send, so edits apply at once; the
+ * interval is the pause after each completed write. Stops on disconnect, on
+ * unreadable or empty input and when a write fails.
+ */
+export async function startPeriodic(read: () => PeriodicInput): Promise<boolean> {
+  if (isPeriodicRunning()) return true;
+  if (!isConnected()) {
+    await alertDialog(t('error.notConnectedTitle'), t('error.notConnected'), 'warn');
+    return false;
+  }
+  if (fileSending) {
+    setStatus(t('sendfile.busy'), 'warn');
+    return false;
+  }
+  const run = ++periodicRun;
+  setBusy('monitor', true);
+  const ms = appStore.get().settings.periodicMs;
+  systemLine(t('periodic.started', { ms }));
+  setStatus(t('periodic.started', { ms }));
+  const tick = async (): Promise<void> => {
+    periodicTimer = null;
+    if (run !== periodicRun) return;
+    const { text, fmt, newline } = read();
+    let data: Uint8Array;
+    try {
+      data = monitorSendBytes(text, fmt, newline, appStore.get().settings.transmitCrc);
+    } catch (err) {
+      stopPeriodic('invalid', err instanceof Error ? err.message : String(err));
+      return;
+    }
+    if (!data.length) {
+      stopPeriodic('empty');
+      return;
+    }
+    if (!isConnected() || !(await write(data, fmt))) {
+      stopPeriodic(isConnected() ? 'failed' : 'disconnected');
+      return;
+    }
+    if (run !== periodicRun) return;
+    periodicTimer = setTimeout(() => void tick(), appStore.get().settings.periodicMs);
+  };
+  await tick();
+  return run === periodicRun && isPeriodicRunning();
+}
+
+export function stopPeriodic(reason: PeriodicStop = 'manual', detail = ''): void {
+  if (!isPeriodicRunning()) return;
+  periodicRun++;
+  if (periodicTimer) clearTimeout(periodicTimer);
+  periodicTimer = null;
+  setBusy('monitor', false);
+  const text = t('periodic.stopped', {
+    reason: t(`periodic.reason.${reason}`) + (detail ? ` – ${detail}` : ''),
+  });
+  systemLine(text, reason === 'manual' || reason === 'disconnected' ? 'sys' : 'err');
+  setStatus(text, reason === 'manual' ? 'info' : 'warn');
 }

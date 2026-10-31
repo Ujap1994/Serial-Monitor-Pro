@@ -6,9 +6,11 @@ describe('settings', () => {
     const transmitCrc = {
       enabled: true,
       algorithm: 'CRC-32',
-      bigEndian: true,
+      bigEndian: false,
       position: -999,
+      useHeader: true,
       header: 'AA 55',
+      useFooter: false,
       footer: '0D 0A',
       includeHeader: false,
       includeFooter: true,
@@ -21,6 +23,58 @@ describe('settings', () => {
         .transmitCrc,
     ).toEqual(DEFAULT_SETTINGS.transmitCrc);
     expect(normalizeSettings({ transmitCrc: { position: 1.5 } }).transmitCrc.position).toBe(1.5);
+  });
+
+  it('keeps the periodic interval within 10 ms and one hour', () => {
+    expect(normalizeSettings({}).periodicMs).toBe(1000);
+    expect(normalizeSettings({ periodicMs: 250 }).periodicMs).toBe(250);
+    expect(normalizeSettings({ periodicMs: 1 }).periodicMs).toBe(10);
+    expect(normalizeSettings({ periodicMs: 9e9 }).periodicMs).toBe(3_600_000);
+    expect(normalizeSettings({ periodicMs: 'fast' }).periodicMs).toBe(1000);
+  });
+
+  it('takes over CRC, header/footer and periodic sending of the CustomTkinter version', () => {
+    const s = migrateLegacySettings({
+      crc_on: true,
+      crc_method: 'CRC-16/CCITT-False',
+      crc_endian: 'Little-Endian',
+      crc_position: 'Insert at index',
+      crc_index: '-1',
+      use_header: true,
+      header: 'AA 55',
+      use_footer: true,
+      footer: '0D',
+      crc_include_header: true,
+      crc_include_footer: false,
+      periodic_ms: '250',
+      auto_scroll: false,
+    });
+    expect(s.transmitCrc).toEqual({
+      enabled: true,
+      algorithm: 'CRC-16/CCITT-False',
+      bigEndian: false,
+      position: -1,
+      useHeader: true,
+      header: 'AA 55',
+      useFooter: true,
+      footer: '0D',
+      includeHeader: true,
+      includeFooter: false,
+    });
+    expect(s.periodicMs).toBe(250);
+    expect(s.autoscroll).toBe(false);
+  });
+
+  it.each([
+    ['Append', '5', 0],
+    ['Insert at index', '2', 2],
+    ['Insert at index', '0', 0],
+    ['Insert at index', 'x', 0],
+    ['unknown', '3', 0],
+  ])('maps Python position %s / index %s to %i', (mode, index, position) => {
+    expect(
+      migrateLegacySettings({ crc_position: mode, crc_index: index }).transmitCrc.position,
+    ).toBe(position);
   });
   it('fills in defaults', () => {
     expect(normalizeSettings({})).toEqual(DEFAULT_SETTINGS);

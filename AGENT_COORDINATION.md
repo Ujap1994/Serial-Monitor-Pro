@@ -7,10 +7,11 @@ not an atomic lock: check with the active agent before overlapping work.
 
 ## Active work — 2026-10-31
 
-| Owner       | Status                    | Scope / files                                                                                           | Next handoff                                                      |
-| ----------- | ------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Codex       | Local validation complete | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release | GitHub CI and release package results                             |
-| Claude Code | Draft integrated by Codex | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                 | Integrated and tested; no concurrent claim from Claude is assumed |
+| Owner       | Status                                                  | Scope / files                                                                                                                                    | Next handoff                                                      |
+| ----------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Codex       | Local validation complete                               | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
+| Claude Code | Paused (usage limit), branch `claude/crc-python-parity` | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
+| Claude Code | Draft integrated by Codex                               | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
 
 Working branch: `codex/crc-transmit`, starting at `48920f1` (1.0.2).
 The original tracked diff is backed up locally at `/private/tmp/smp-before-codex.patch`.
@@ -43,3 +44,17 @@ The draft has been incorporated into this release; no original work was discarde
   `docs/LONG_RUN_TEST_CHECKLIST.md`. CLI is assessed, not implemented.
 
 - Follow-up: file transfer now generates pieces lazily, including the 16 MiB / one-byte-block edge case. The first package run was cancelled before publication to include this fix.
+
+## Claude Code handoff — 2026-10-31 (branch `claude/crc-python-parity`, not merged)
+
+Reworked CRC transmit to match the Python (CustomTkinter) original, per owner request:
+position semantics like Python slicing (-1 = before the last byte; 0 = append), Monitor
+header/footer with use-checkboxes added automatically (send format), CRC include checkboxes,
+per-preset "Append CRC" (`add_crc`), Monitor periodic sending, legacy import of
+`serial_monitor_settings.json`, two-column CRC tab, tab bar actions no longer scroll away,
+form-grid alignment, Monitor options grouping.
+
+Checks run: `tsc` (node/web/test) clean, `eslint` clean, `vitest run` 960 passed / 16 skipped.
+NOT yet done: E2E specs (`tests/e2e/crc-transmit.spec.ts` still targets the old design and will
+fail), `scripts/screenshots.mjs` (`.sendbar` selector, CRC views), README/guide/CHANGELOG,
+parity matrix in `docs/DEVELOPMENT_STATUS.md`, `npm run check`, merge to main, 1.1.0 release.

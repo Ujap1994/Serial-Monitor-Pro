@@ -10,6 +10,7 @@ import {
   validateCommand,
 } from '@shared/core/commands';
 import { describeStep, newStep, normalizeStep } from '@shared/core/steps';
+import { DEFAULT_TRANSMIT_CRC } from '@shared/core/transmit-crc';
 
 beforeAll(() => setLanguage('de'));
 
@@ -19,6 +20,52 @@ const C = (
   fmt: 'ASCII' | 'HEX' = 'HEX',
   newline: 'None' | 'LF' | 'CR' | 'CRLF' = 'LF',
 ) => newCommand({ name, data, fmt, newline });
+
+describe('commands with "Append CRC" (add_crc of the Python presets)', () => {
+  const crc = {
+    ...DEFAULT_TRANSMIT_CRC,
+    bigEndian: false,
+    // Monitor-only options must not reach presets.
+    enabled: false,
+    useHeader: true,
+    header: 'AA',
+    useFooter: true,
+    footer: 'BB',
+    includeHeader: true,
+  };
+
+  it('inserts the CRC before the line ending, without Monitor header/footer', () => {
+    const cmd = newCommand({ data: '01 03 00 00 00 0A', newline: 'CRLF', addCrc: true });
+    expect(Array.from(commandBytes(cmd, crc))).toEqual([
+      0x01, 0x03, 0x00, 0x00, 0x00, 0x0a, 0xc5, 0xcd, 0x0d, 0x0a,
+    ]);
+    expect(Array.from(commandBytes(cmd, { ...crc, position: -1 }))).toEqual([
+      0x01, 0x03, 0x00, 0x00, 0x00, 0xc5, 0xcd, 0x0a, 0x0d, 0x0a,
+    ]);
+  });
+
+  it('leaves commands without the option and empty commands untouched', () => {
+    expect(Array.from(commandBytes(newCommand({ data: '01', newline: 'None' }), crc))).toEqual([
+      0x01,
+    ]);
+    expect(
+      Array.from(commandBytes(newCommand({ data: '', newline: 'LF', addCrc: true }), crc)),
+    ).toEqual([0x0a]);
+  });
+
+  it('validates and previews with the CRC, and reports impossible positions', () => {
+    const cmd = newCommand({ name: 'R', data: '01 03', newline: 'None', addCrc: true });
+    expect(commandPreview(cmd, crc)).toContain('(4 B)');
+    expect(validateCommand(cmd, { ...crc, position: 5 }).ok).toBe(false);
+  });
+
+  it('reads add_crc from Python exports and addCrc from own exports', () => {
+    expect(normalizeCommand({ name: 'a', add_crc: true }).addCrc).toBe(true);
+    expect(normalizeCommand({ name: 'a', addCrc: true }).addCrc).toBe(true);
+    expect(normalizeCommand({ name: 'a', addCrc: 'yes' }).addCrc).toBe(false);
+    expect(normalizeCommand({ name: 'a' }).addCrc).toBe(false);
+  });
+});
 
 describe('commands', () => {
   it('appends the line ending', () => {
@@ -59,6 +106,7 @@ describe('commands', () => {
       newline: 'CRLF',
       delayMs: 250,
       enabled: false,
+      addCrc: false,
     });
   });
 
@@ -75,6 +123,7 @@ describe('commands', () => {
       newline: 'LF',
       delayMs: 200,
       enabled: true,
+      addCrc: false,
     });
   });
 });

@@ -50,6 +50,22 @@ describe('import of the former Python version', () => {
     });
   });
 
+  it('merges the CustomTkinter settings file; the PySide file wins on overlap', async () => {
+    writeFileSync(
+      join(legacy, 'serial_monitor_settings.json'),
+      JSON.stringify({ crc_on: true, use_header: true, header: '02', timestamp: false }),
+    );
+    expect(await store.load('settings')).toMatchObject({
+      timestamp: false,
+      transmitCrc: { enabled: true, useHeader: true, header: '02' },
+    });
+    writeFileSync(join(legacy, 'settings.json'), JSON.stringify({ timestamp: true }));
+    expect(await store.load('settings')).toMatchObject({
+      timestamp: true,
+      transmitCrc: { enabled: true },
+    });
+  });
+
   it('takes over presets as commands and automation as it is', async () => {
     writeFileSync(join(legacy, 'presets.json'), JSON.stringify([{ name: 'Ping' }]));
     writeFileSync(join(legacy, 'automation.json'), JSON.stringify([{ type: 'note' }]));

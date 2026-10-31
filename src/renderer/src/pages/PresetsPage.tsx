@@ -24,6 +24,7 @@ import { alertDialog, confirmDialog } from '../state/ui';
 export function PresetsPage(): ReactNode {
   const t = useT();
   const commands = useStore(appStore, (s) => s.commands);
+  const crc = useStore(appStore, (s) => s.settings.transmitCrc);
   const [selected, setSelected] = useState(0);
   const [editing, setEditing] = useState<{ index: number | null } | null>(null);
   const index = Math.min(selected, commands.length - 1);
@@ -138,6 +139,7 @@ export function PresetsPage(): ReactNode {
               >
                 <span className="title">{c.name}</span>
                 <span className="badge">{c.fmt}</span>
+                {c.addCrc && <span className="badge badge-crc">+CRC</span>}
                 {!c.enabled && <span className="badge">{t('presets.skipped')}</span>}
               </div>
             ))}
@@ -158,12 +160,20 @@ export function PresetsPage(): ReactNode {
                 <dd>{t(`newline.${current.newline}`)}</dd>
                 <dt>{t('command.delay')}</dt>
                 <dd>{current.delayMs} ms</dd>
+                <dt>{t('presets.crc')}</dt>
+                <dd>
+                  {current.addCrc
+                    ? t('presets.crcOn', { algorithm: crc.algorithm })
+                    : t('presets.crcOff')}
+                </dd>
                 <dt>{t('presets.inTable')}</dt>
                 <dd>{current.enabled ? t('presets.active') : t('presets.skipped')}</dd>
               </dl>
               <div>
                 <div className="section-title">{t('command.willSend')}</div>
-                <div className="preview">{commandPreview(current)}</div>
+                <div className="preview" data-testid="preset-preview">
+                  {commandPreview(current, crc)}
+                </div>
               </div>
               <span className="grow" />
               <Button
