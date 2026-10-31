@@ -1,4 +1,4 @@
-# Packaging for Windows, macOS and Linux (x64 + arm64).
+# Packaging for Windows, macOS and Linux (x64 + arm64, plus macOS Universal).
 # Documentation: https://www.electron.build/configuration
 #
 # Local builds:  npm run dist:linux | dist:win | dist:mac
@@ -50,8 +50,13 @@ mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch: [arm64, x64, universal]
+    - target: zip
+      arch: [arm64, x64, universal]
+  # @serialport/bindings-cpp ships a darwin-x64+arm64 Universal prebuild.
+  # @electron/universal recognizes it without broad single-architecture exceptions.
+  mergeASARs: true
   # No paid Apple certificate: ad-hoc signature, which Apple Silicon requires.
   identity: '-'
   hardenedRuntime: false
@@ -85,12 +90,28 @@ linux:
     - deb
     - rpm
     - pacman
+    - snap
     - tar.gz
 deb:
   # Serial ports belong to the "dialout" group – see the README.
   packageCategory: devel
 rpm:
   fpm: ['--rpm-rpmbuild-define', '_build_id_links none']
+snapcraft:
+  # core24 uses Snapcraft directly and supports both x64 and arm64.
+  base: core24
+  artifactName: SerialMonitorPro-${version}-linux-${arch}.${ext}
+  core24:
+    useLXD: true
+    confinement: strict
+    plugs:
+      - home
+      - network
+      - serial-port
+      # Custom plugs disable the builder's automatic browser-support injection.
+      - browser-support:
+          interface: browser-support
+          allow-sandbox: true
 flatpak:
   runtime: org.freedesktop.Platform
   runtimeVersion: '25.08'

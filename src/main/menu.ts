@@ -81,6 +81,8 @@ export function buildMenu(
       item(tr('menu.toggleConnection'), 'toggle-connection', 'CmdOrCtrl+K'),
       item(tr('menu.refreshPorts'), 'refresh-ports', 'F5'),
       item(tr('menu.baudScan'), 'baud-scan'),
+      { type: 'separator' },
+      item(tr('menu.sendFile'), 'send-file'),
     ],
   });
 
@@ -125,6 +127,8 @@ export function buildMenu(
         label: tr('menu.issue'),
         click: () => void shell.openExternal(`${REPOSITORY_URL}/issues/new/choose`),
       },
+      { type: 'separator' },
+      item(tr('menu.checkUpdates'), 'check-updates'),
       ...(isMac
         ? []
         : ([

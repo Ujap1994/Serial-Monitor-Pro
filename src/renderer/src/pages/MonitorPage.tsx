@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Eraser,
+  FileUp,
   ListChecks,
   PanelLeftClose,
   PanelLeftOpen,
@@ -10,11 +11,14 @@ import {
 } from 'lucide-react';
 import { NEWLINES, type Newline } from '@shared/core/commands';
 import { DATA_FORMATS, formatHexInput, type DataFormat } from '@shared/core/format';
+import { toHexString } from '@shared/core/bytes';
+import { monitorSendBytes } from '@shared/core/transmit-crc';
 import { MonitorView } from '../components/LogView';
 import { Button, Card, Check, Input, Select } from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore, setTab, updateSettings } from '../state/app';
+import { openDialog } from '../state/ui';
 import {
   clearMonitor,
   monitor,
@@ -174,6 +178,16 @@ function SendBar(): ReactNode {
   const input = useRef<HTMLInputElement>(null);
   const history = useRef<string[]>([]);
   const historyPos = useRef(-1);
+  const preview = useMemo(() => {
+    try {
+      return {
+        text: toHexString(monitorSendBytes(text, s.sendFormat, s.newline, s.transmitCrc)),
+        error: false,
+      };
+    } catch (err) {
+      return { text: err instanceof Error ? err.message : String(err), error: true };
+    }
+  }, [text, s.sendFormat, s.newline, s.transmitCrc]);
 
   const hexOptions = { uppercase: s.hexUppercase, group: s.hexGroup, groupSize: s.hexGroupSize };
 
@@ -196,64 +210,104 @@ function SendBar(): ReactNode {
   };
 
   return (
-    <div className="sendbar">
-      <span className="toolbar-label">{t('monitor.send')}</span>
-      <Select<DataFormat>
-        value={s.sendFormat}
-        options={DATA_FORMATS}
-        data-testid="send-format"
-        style={{ width: 86 }}
-        onChange={(sendFormat) => {
-          updateSettings({ sendFormat });
-          if (sendFormat === 'HEX' && text.trim())
-            setText(formatHexInput(text, -1, hexOptions).text);
-        }}
-      />
-      <Input
-        ref={input}
-        mono
-        data-testid="send-input"
-        value={text}
-        placeholder={connected ? t('monitor.sendPlaceholder') : t('monitor.sendPlaceholderOffline')}
-        onChange={(e) => {
-          if (s.sendFormat === 'HEX') applyHex(e.target.value, e.target.selectionStart ?? -1);
-          else setText(e.target.value);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            void send();
-          } else if (
-            s.sendHistory &&
-            history.current.length &&
-            (e.key === 'ArrowUp' || e.key === 'ArrowDown')
-          ) {
-            e.preventDefault();
-            const h = history.current;
-            if (e.key === 'ArrowUp') {
-              historyPos.current = Math.min(historyPos.current + 1, h.length - 1);
-            } else {
-              historyPos.current = Math.max(historyPos.current - 1, -1);
-            }
-            setText(historyPos.current < 0 ? '' : (h[h.length - 1 - historyPos.current] ?? ''));
+    <div>
+      <div className="row" style={{ marginBottom: 6 }}>
+        <Check
+          checked={s.transmitCrc.enabled}
+          onChange={(enabled) => updateSettings({ transmitCrc: { ...s.transmitCrc, enabled } })}
+          testId="monitor-crc-auto"
+        >
+          {t('crc.autoShort')}
+        </Check>
+        <Button size="sm" onClick={() => setTab('crc')}>
+          {t('crc.settings')}
+        </Button>
+        {s.transmitCrc.enabled && (
+          <span className="muted small">
+            {s.transmitCrc.algorithm} · {s.transmitCrc.bigEndian ? 'BE' : 'LE'} ·{' '}
+            {t('crc.position')} {s.transmitCrc.position}
+          </span>
+        )}
+      </div>
+      <div className="sendbar">
+        <span className="toolbar-label">{t('monitor.send')}</span>
+        <Select<DataFormat>
+          value={s.sendFormat}
+          options={DATA_FORMATS}
+          data-testid="send-format"
+          style={{ width: 86 }}
+          onChange={(sendFormat) => {
+            updateSettings({ sendFormat });
+            if (sendFormat === 'HEX' && text.trim())
+              setText(formatHexInput(text, -1, hexOptions).text);
+          }}
+        />
+        <Input
+          ref={input}
+          mono
+          data-testid="send-input"
+          value={text}
+          placeholder={
+            connected ? t('monitor.sendPlaceholder') : t('monitor.sendPlaceholderOffline')
           }
-        }}
-      />
-      <span className="toolbar-label muted">{t('monitor.newline')}</span>
-      <Select<Newline>
-        value={s.newline}
-        options={NEWLINES.map((n) => ({ value: n, label: t(`newline.${n}`) }))}
-        onChange={(newline) => updateSettings({ newline })}
-        style={{ width: 104 }}
-      />
-      <Button
-        variant="success"
-        icon={SendHorizontal}
-        onClick={() => void send()}
-        data-testid="send-button"
-      >
-        {t('monitor.sendButton')}
-      </Button>
+          onChange={(e) => {
+            if (s.sendFormat === 'HEX') applyHex(e.target.value, e.target.selectionStart ?? -1);
+            else setText(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void send();
+            } else if (
+              s.sendHistory &&
+              history.current.length &&
+              (e.key === 'ArrowUp' || e.key === 'ArrowDown')
+            ) {
+              e.preventDefault();
+              const h = history.current;
+              if (e.key === 'ArrowUp') {
+                historyPos.current = Math.min(historyPos.current + 1, h.length - 1);
+              } else {
+                historyPos.current = Math.max(historyPos.current - 1, -1);
+              }
+              setText(historyPos.current < 0 ? '' : (h[h.length - 1 - historyPos.current] ?? ''));
+            }
+          }}
+        />
+        <span className="toolbar-label muted">{t('monitor.newline')}</span>
+        <Select<Newline>
+          value={s.newline}
+          options={NEWLINES.map((n) => ({ value: n, label: t(`newline.${n}`) }))}
+          onChange={(newline) => updateSettings({ newline })}
+          style={{ width: 104 }}
+        />
+        <Button
+          variant="success"
+          icon={SendHorizontal}
+          onClick={() => void send()}
+          data-testid="send-button"
+          disabled={preview.error}
+        >
+          {t('monitor.sendButton')}
+        </Button>
+        <Button
+          icon={FileUp}
+          onClick={() => openDialog('sendfile')}
+          title={t('monitor.sendFileTip')}
+          data-testid="send-file"
+        >
+          {t('monitor.sendFile')}
+        </Button>
+      </div>
+      {s.transmitCrc.enabled && (
+        <div
+          className={preview.error ? 'notice' : 'muted small mono selectable'}
+          data-testid="send-preview"
+          style={{ overflowWrap: 'anywhere', maxHeight: 60, overflow: 'auto', marginTop: 6 }}
+        >
+          {t('crc.wirePreview')}: {preview.text || '—'}
+        </div>
+      )}
     </div>
   );
 }

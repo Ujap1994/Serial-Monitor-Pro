@@ -19,6 +19,9 @@ const api: SmpApi = {
     close: (id) => ipcRenderer.invoke(IPC.serialClose, id),
     write: (id, data) => ipcRenderer.invoke(IPC.serialWrite, id, data),
     sample: (path, baudRate, ms) => ipcRenderer.invoke(IPC.serialSample, path, baudRate, ms),
+    setLines: (id, lines) => ipcRenderer.invoke(IPC.serialSetLines, id, lines),
+    getLines: (id) => ipcRenderer.invoke(IPC.serialGetLines, id),
+    sendBreak: (id, ms) => ipcRenderer.invoke(IPC.serialBreak, id, ms),
     onEvent: (listener) => subscribe<SerialEvent>(IPC.serialEvent, listener),
   },
   store: {
@@ -29,6 +32,7 @@ const api: SmpApi = {
     saveText: (defaultName, content, filters) =>
       ipcRenderer.invoke(IPC.fileSave, defaultName, content, filters),
     openText: (filters) => ipcRenderer.invoke(IPC.fileOpen, filters),
+    openBinary: (maxBytes) => ipcRenderer.invoke(IPC.fileOpenBinary, maxBytes),
   },
   log: {
     start: (defaultName) => ipcRenderer.invoke(IPC.logStart, defaultName),
@@ -36,10 +40,13 @@ const api: SmpApi = {
     stop: () => ipcRenderer.invoke(IPC.logStop),
   },
   app: {
+    onCloseRequested: (listener) => subscribe<void>(IPC.appCloseRequested, listener),
+    closeReady: () => ipcRenderer.send(IPC.appCloseReady),
     info: () => ipcRenderer.invoke(IPC.appInfo),
     setTheme: (theme) => ipcRenderer.send(IPC.appTheme, theme),
     setLanguage: (language) => ipcRenderer.send(IPC.appLanguage, language),
     openExternal: (url) => ipcRenderer.invoke(IPC.appExternal, url),
+    releases: () => ipcRenderer.invoke(IPC.appReleases),
     onMenu: (listener) => subscribe<MenuAction>(IPC.appMenu, listener),
   },
 };

@@ -19,6 +19,7 @@ export default defineConfig({
         'src/main/serial.ts',
         'src/main/simulator.ts',
         'src/main/storage.ts',
+        'src/main/updates.ts',
         'src/renderer/src/lib/monitor.ts',
       ],
       reporter: ['text', 'html'],

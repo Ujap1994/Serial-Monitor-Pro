@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { createStore } from '../lib/store';
 import type { Tone } from './app';
 
-export type GlobalDialog = 'settings' | 'about' | 'baudscan' | 'shortcuts';
+export type GlobalDialog = 'settings' | 'about' | 'baudscan' | 'shortcuts' | 'sendfile' | 'update';
 
 export interface Choice<T> {
   label: string;

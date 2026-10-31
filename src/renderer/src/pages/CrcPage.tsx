@@ -1,10 +1,23 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Calculator, FlaskConical, ShieldCheck } from 'lucide-react';
-import { concatBytes, toHexString, writeUInt } from '@shared/core/bytes';
+import { toHexString, writeUInt } from '@shared/core/bytes';
 import { calculateCrc, CRC_NAMES, CRC_PRESETS, formatCrc, type CrcName } from '@shared/core/crc';
 import { DATA_FORMATS, InputError, parseSendData, type DataFormat } from '@shared/core/format';
-import { Button, Card, Empty, Field, Input, PageHeader, Select } from '../components/ui';
+import { insertTransmitCrc, type TransmitCrcConfig } from '@shared/core/transmit-crc';
+import {
+  Button,
+  Card,
+  Check,
+  Empty,
+  Field,
+  Input,
+  NumberInput,
+  PageHeader,
+  Select,
+} from '../components/ui';
 import { useT } from '../lib/i18n';
+import { useStore } from '../lib/store';
+import { appStore, updateSettings } from '../state/app';
 
 function Value({
   label,
@@ -26,7 +39,11 @@ function Value({
 export function CrcPage(): ReactNode {
   const t = useT();
   const [fmt, setFmt] = useState<DataFormat>('HEX');
-  const [algo, setAlgo] = useState<CrcName>('CRC-16/MODBUS');
+  const config = useStore(appStore, (s) => s.settings.transmitCrc);
+  const algo = config.algorithm;
+  const set = (patch: Partial<TransmitCrcConfig>): void =>
+    updateSettings({ transmitCrc: { ...config, ...patch } });
+  const setAlgo = (algorithm: CrcName): void => set({ algorithm });
   const [input, setInput] = useState('');
   const [compare, setCompare] = useState(false);
 
@@ -38,9 +55,17 @@ export function CrcPage(): ReactNode {
     }
   }, [input, fmt]);
 
-  const data = parsed.data;
+  const result = useMemo(() => {
+    if (!parsed.data?.length) return { built: null, error: parsed.error };
+    try {
+      return { built: insertTransmitCrc(parsed.data, config), error: '' };
+    } catch (err) {
+      return { built: null, error: err instanceof Error ? err.message : String(err) };
+    }
+  }, [parsed, config]);
+  const data = result.built?.covered;
   const width = CRC_PRESETS[algo].width;
-  const value = data?.length ? calculateCrc(data, algo) : null;
+  const value = result.built?.value ?? null;
   const be = value === null ? null : writeUInt(value, width / 8, true);
   const le = value === null ? null : writeUInt(value, width / 8, false);
 
@@ -76,6 +101,68 @@ export function CrcPage(): ReactNode {
             />
           </Field>
         </div>
+        <div
+          className="form-grid"
+          style={{ gridTemplateColumns: '180px 150px 1fr 1fr', marginTop: 12 }}
+        >
+          <Field label={t('crc.endian')}>
+            <Select
+              value={config.bigEndian ? 'big' : 'little'}
+              options={[
+                { value: 'little', label: 'Little-Endian' },
+                { value: 'big', label: 'Big-Endian' },
+              ]}
+              onChange={(value) => set({ bigEndian: value === 'big' })}
+              data-testid="crc-endian"
+            />
+          </Field>
+          <Field label={t('crc.position')}>
+            <NumberInput
+              value={config.position}
+              onChange={(position) => set({ position })}
+              data-testid="crc-position"
+            />
+          </Field>
+          <Field label={t('crc.header')}>
+            <Input
+              mono
+              value={config.header}
+              onChange={(e) => set({ header: e.target.value })}
+              placeholder="AA 55"
+              data-testid="crc-header"
+            />
+            <Check
+              checked={config.includeHeader}
+              onChange={(includeHeader) => set({ includeHeader })}
+              testId="crc-include-header"
+            >
+              {t('crc.includeHeader')}
+            </Check>
+          </Field>
+          <Field label={t('crc.footer')}>
+            <Input
+              mono
+              value={config.footer}
+              onChange={(e) => set({ footer: e.target.value })}
+              placeholder="0D 0A"
+              data-testid="crc-footer"
+            />
+            <Check
+              checked={config.includeFooter}
+              onChange={(includeFooter) => set({ includeFooter })}
+              testId="crc-include-footer"
+            >
+              {t('crc.includeFooter')}
+            </Check>
+          </Field>
+        </div>
+        <p className="muted small">
+          {t('crc.positionHint')} {t('crc.framingHint')}
+        </p>
+        <Check checked={config.enabled} onChange={(enabled) => set({ enabled })} testId="crc-auto">
+          {t('crc.auto')}
+        </Check>
+        <p className="muted small">{t('crc.scope')}</p>
         <div className="row" style={{ marginTop: 10 }}>
           <Button
             variant={compare ? 'default' : 'primary'}
@@ -106,9 +193,11 @@ export function CrcPage(): ReactNode {
       </Card>
 
       <Card title={t('crc.result')} fill>
-        {parsed.error ? (
-          <div className="notice">{parsed.error}</div>
-        ) : !data?.length ? (
+        {result.error ? (
+          <div className="notice" data-testid="crc-error">
+            {result.error}
+          </div>
+        ) : !data ? (
           <Empty icon={ShieldCheck}>{t('crc.empty')}</Empty>
         ) : compare ? (
           <div className="table-wrap">
@@ -150,14 +239,14 @@ export function CrcPage(): ReactNode {
               </div>
               <div className="section-title">{t('crc.withCrc')}</div>
               <dl className="detail selectable">
-                <dt>{t('crc.data')}</dt>
+                <dt>{t('crc.covered')}</dt>
                 <dd className="mono">
                   {toHexString(data)} <span className="muted">({data.length} B)</span>
                 </dd>
-                <dt>Big-Endian</dt>
-                <dd className="mono">{toHexString(concatBytes(data, be))}</dd>
-                <dt>Little-Endian</dt>
-                <dd className="mono">{toHexString(concatBytes(data, le))}</dd>
+                <dt>{config.bigEndian ? 'Big-Endian' : 'Little-Endian'}</dt>
+                <dd className="mono" data-testid="crc-packet">
+                  {result.built && toHexString(result.built.packet)}
+                </dd>
               </dl>
             </>
           )

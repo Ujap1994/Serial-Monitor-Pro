@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { BookOpen, Bug, ExternalLink, Info, Scale } from 'lucide-react';
+import { BookOpen, Bug, Download, ExternalLink, Info, Scale } from 'lucide-react';
 import logo from '../assets/logo.svg';
 import { Modal } from '../components/Modal';
 import { Button } from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore } from '../state/app';
+import { checkForUpdates } from '../state/updates';
 
 export function AboutDialog({ onClose }: { onClose: () => void }): ReactNode {
   const t = useT();
@@ -29,6 +30,9 @@ export function AboutDialog({ onClose }: { onClose: () => void }): ReactNode {
           </Button>
           <Button size="sm" icon={Scale} onClick={open('/blob/main/LICENSE')}>
             {t('about.license')}
+          </Button>
+          <Button size="sm" icon={Download} onClick={() => void checkForUpdates(true)}>
+            {t('about.checkUpdates')}
           </Button>
           <span className="spacer" />
           <Button variant="primary" onClick={onClose}>

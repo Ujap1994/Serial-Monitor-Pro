@@ -1,12 +1,21 @@
 // Connection of the monitor and distribution of received data.
 
-import { t } from '@shared/i18n';
+import { formatCount, t } from '@shared/i18n';
 import { StreamAssembler } from '@shared/core/assembler';
-import { commandBytes, NEWLINE_BYTES, type Command, type Newline } from '@shared/core/commands';
-import { concatBytes } from '@shared/core/bytes';
-import { InputError, parseSendData, type DataFormat } from '@shared/core/format';
+import { commandBytes, type Command, type Newline } from '@shared/core/commands';
+import { monitorSendBytes } from '@shared/core/transmit-crc';
+import { splitForSending, type FileSendMode } from '@shared/core/filesend';
+import { InputError, type DataFormat } from '@shared/core/format';
 import { fileStamp } from '@shared/core/timestamp';
-import type { Chunk, Failure, SerialEvent } from '@shared/ipc';
+import type {
+  BinaryFile,
+  Chunk,
+  ControlLines,
+  Failure,
+  ModemLines,
+  OpenOptions,
+  SerialEvent,
+} from '@shared/ipc';
 import {
   MonitorModel,
   lineToText,
@@ -172,18 +181,31 @@ function stopReconnect(): void {
 
 function describeSettings(): string {
   const s = appStore.get().settings;
-  return `${s.baud} ${s.dataBits}${s.parity[0]}${s.stopBits}`;
+  const flow = s.flowControl === 'none' ? '' : ` ${t(`conn.flow.${s.flowControl}`)}`;
+  return `${s.baud} ${s.dataBits}${s.parity[0]}${s.stopBits}${flow}`;
 }
 
-async function open(path: string): Promise<boolean> {
+/** Output lines as they should be – with hardware flow control the driver owns RTS. */
+function controlLines(): ControlLines {
   const s = appStore.get().settings;
-  const result = await window.smp.serial.open(MAIN, {
+  return s.flowControl === 'rtscts' ? { dtr: true, rts: true } : { dtr: s.dtr, rts: s.rts };
+}
+
+function openOptions(path: string): OpenOptions {
+  const s = appStore.get().settings;
+  return {
     path,
     baudRate: s.baud,
     dataBits: s.dataBits,
     parity: s.parity,
     stopBits: s.stopBits,
-  });
+    flowControl: s.flowControl,
+    lines: controlLines(),
+  };
+}
+
+async function open(path: string): Promise<boolean> {
+  const result = await window.smp.serial.open(MAIN, openOptions(path));
   if (!result.ok) {
     appStore.set({ connection: 'disconnected', connectedPath: '' });
     setStatus(t('status.connectFailed'), 'error');
@@ -243,14 +265,7 @@ function scheduleReconnect(path: string): void {
   reconnectTimer = setTimeout(() => {
     void (async () => {
       if (appStore.get().connection !== 'reconnecting') return;
-      const s = appStore.get().settings;
-      const result = await window.smp.serial.open(MAIN, {
-        path,
-        baudRate: s.baud,
-        dataBits: s.dataBits,
-        parity: s.parity,
-        stopBits: s.stopBits,
-      });
+      const result = await window.smp.serial.open(MAIN, openOptions(path));
       if (result.ok && appStore.get().connection === 'reconnecting') {
         assembler.reset();
         appStore.set({ connection: 'connected', connectedPath: path });
@@ -292,6 +307,7 @@ function onMainEvent(event: SerialEvent): void {
     systemLine(t('monitor.disconnected', { port: event.path }));
     setStatus(t('status.disconnected'));
   }
+  appStore.set({ modemLines: null });
   if (appStore.get().connection !== 'reconnecting') {
     appStore.set({ connection: 'disconnected', connectedPath: '' });
   }
@@ -304,17 +320,165 @@ export function initSerial(): () => void {
   });
 }
 
+// ── Control lines ────────────────────────────────────────────────────────────
+/** Switches DTR or RTS; while disconnected it only sets the state for the next connection. */
+export async function setControlLine(line: 'dtr' | 'rts', on: boolean): Promise<void> {
+  if (appStore.get().settings.flowControl === 'rtscts') return;
+  if (isConnected()) {
+    const result = await window.smp.serial.setLines(MAIN, { ...controlLines(), [line]: on });
+    if (!result.ok) {
+      setStatus(t('status.linesFailed', { error: result.error }), 'error');
+      return;
+    }
+  }
+  updateSettings(line === 'dtr' ? { dtr: on } : { rts: on });
+}
+
+export async function sendBreak(): Promise<void> {
+  if (!isConnected() || appStore.get().settings.flowControl === 'rtscts') return;
+  const result = await window.smp.serial.sendBreak(MAIN, 250);
+  if (!result.ok) {
+    setStatus(t('status.linesFailed', { error: result.error }), 'error');
+    return;
+  }
+  setStatus(t('status.breakSent'), 'ok');
+  systemLine(t('status.breakSent'));
+}
+
+const sameLines = (a: ModemLines | null, b: ModemLines | null): boolean =>
+  a === b || (!!a && !!b && a.cts === b.cts && a.dsr === b.dsr && a.dcd === b.dcd);
+
+// The inputs (CTS, DSR, DCD) are polled while connected – there is no
+// portable way to be notified when they change.
+let polling = false;
+setInterval(() => {
+  if (polling || appStore.get().connection !== 'connected') return;
+  polling = true;
+  void window.smp.serial.getLines(MAIN).then((result) => {
+    polling = false;
+    const lines = result.ok && appStore.get().connection === 'connected' ? result.value : null;
+    if (!sameLines(appStore.get().modemLines, lines)) appStore.set({ modemLines: lines });
+  });
+}, 250);
+
+// ── Sending a file ───────────────────────────────────────────────────────────
+export interface FileSendOptions {
+  mode: FileSendMode;
+  blockSize: number;
+  pauseMs: number;
+}
+
+export type FileSendOutcome = 'done' | 'cancelled' | 'failed';
+let fileSending = false;
+let activeWrites = 0;
+
+/**
+ * Sends a file piece by piece; `signal` cancels. The monitor gets one line at
+ * the start and one at the end instead of every piece – a file of several
+ * megabytes would otherwise flood it.
+ */
+export async function sendFile(
+  file: BinaryFile,
+  options: FileSendOptions,
+  onProgress: (sent: number, total: number) => void,
+  signal: AbortSignal,
+): Promise<FileSendOutcome> {
+  if (signal.aborted) return 'cancelled';
+  if (
+    fileSending ||
+    activeWrites ||
+    appStore.get().busyTabs.some((tab) => tab === 'automation' || tab === 'sendtable')
+  ) {
+    setStatus(t('sendfile.busy'), 'warn');
+    return 'failed';
+  }
+  const pieces = splitForSending(file.data, options.mode, options.blockSize);
+  const total = file.data.length;
+  const started = performance.now();
+  let sent = 0;
+  let reported = 0;
+  let outcome: FileSendOutcome = 'done';
+  fileSending = true;
+  // Closing the port releases a write/drain stalled by flow control.
+  const cancel = (): void => {
+    void disconnect();
+  };
+  signal.addEventListener('abort', cancel, { once: true });
+  try {
+    systemLine(t('sendfile.started', { name: file.name, bytes: formatCount(total) }));
+    onProgress(0, total);
+    for (const [i, piece] of pieces.entries()) {
+      if (signal.aborted) {
+        outcome = 'cancelled';
+        break;
+      }
+      const result = isConnected()
+        ? await window.smp.serial.write(MAIN, piece)
+        : ({ ok: false } as const);
+      if (!result.ok) {
+        outcome = signal.aborted ? 'cancelled' : 'failed';
+        break;
+      }
+      sent += piece.length;
+      txBytes += piece.length;
+      if (performance.now() - reported > 50 || sent === total) {
+        reported = performance.now();
+        onProgress(sent, total);
+      }
+      if (options.pauseMs > 0 && i < pieces.length - 1) {
+        await new Promise<void>((resolve) => {
+          const done = (): void => {
+            clearTimeout(timer);
+            signal.removeEventListener('abort', done);
+            resolve();
+          };
+          const timer = setTimeout(done, options.pauseMs);
+          signal.addEventListener('abort', done, { once: true });
+          if (signal.aborted) done();
+        });
+      }
+    }
+  } catch {
+    outcome = signal.aborted ? 'cancelled' : 'failed';
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    fileSending = false;
+  }
+  if (outcome === 'done' && signal.aborted && sent < total) outcome = 'cancelled';
+  onProgress(sent, total);
+  const seconds = ((performance.now() - started) / 1000).toFixed(1);
+  const counts = { sent: formatCount(sent), total: formatCount(total) };
+  if (outcome === 'done') {
+    systemLine(t('sendfile.done', { name: file.name, bytes: formatCount(total), seconds }), 'ok');
+  } else if (outcome === 'cancelled') {
+    systemLine(t('sendfile.cancelled', counts));
+  } else {
+    systemLine(t('sendfile.failed', counts), 'err');
+    setStatus(t('sendfile.failed', counts), 'error');
+  }
+  return outcome;
+}
+
 // ── Sending ──────────────────────────────────────────────────────────────────
 async function write(data: Uint8Array, fmt: DataFormat, label?: string): Promise<boolean> {
-  const result = await window.smp.serial.write(MAIN, data);
-  if (!result.ok) {
-    setStatus(t('status.sendFailed'), 'error');
+  if (fileSending) {
+    setStatus(t('sendfile.busy'), 'warn');
     return false;
   }
-  txBytes += data.length;
-  if (appStore.get().settings.echoSent)
-    monitor.add({ kind: 'tx', t: Date.now(), raw: data, fmt, label });
-  return true;
+  activeWrites++;
+  try {
+    const result = await window.smp.serial.write(MAIN, data);
+    if (!result.ok) {
+      setStatus(t('status.sendFailed'), 'error');
+      return false;
+    }
+    txBytes += data.length;
+    if (appStore.get().settings.echoSent)
+      monitor.add({ kind: 'tx', t: Date.now(), raw: data, fmt, label });
+    return true;
+  } finally {
+    activeWrites--;
+  }
 }
 
 export function isConnected(): boolean {
@@ -332,7 +496,7 @@ export async function sendText(text: string, fmt: DataFormat, newline: Newline):
   }
   let data: Uint8Array;
   try {
-    data = parseSendData(text, fmt);
+    data = monitorSendBytes(text, fmt, newline, appStore.get().settings.transmitCrc);
   } catch (err) {
     const message = err instanceof InputError ? err.message : String(err);
     await alertDialog(
@@ -343,7 +507,7 @@ export async function sendText(text: string, fmt: DataFormat, newline: Newline):
     return false;
   }
   if (!data.length) return false;
-  return write(concatBytes(data, NEWLINE_BYTES[newline]), fmt);
+  return write(data, fmt);
 }
 
 /**

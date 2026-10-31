@@ -11,7 +11,9 @@ import { performance } from 'node:perf_hooks';
 import { SerialPort } from 'serialport';
 import type {
   Chunk,
+  ControlLines,
   Failure,
+  ModemLines,
   OpenOptions,
   PortInfo,
   Result,
@@ -22,6 +24,8 @@ import type {
 import { isSimulatedPath, SimulatedDevice, simulatedPorts } from './simulator';
 
 const BATCH_MS = 8;
+/** Line state the operating system sets when a port is opened. */
+const DEFAULT_LINES: ControlLines = { dtr: true, rts: true };
 /** How often an open port checks that its device node still exists. */
 const PRESENCE_MS = 1000;
 const PARITY = { None: 'none', Even: 'even', Odd: 'odd', Mark: 'mark', Space: 'space' } as const;
@@ -29,16 +33,37 @@ const PARITY = { None: 'none', Even: 'even', Odd: 'odd', Mark: 'mark', Space: 's
 interface Handle {
   write(data: Uint8Array): Promise<void>;
   close(): Promise<void>;
+  setLines(lines: ControlLines): Promise<void>;
+  getLines(): Promise<ModemLines>;
+  sendBreak(ms: number): Promise<void>;
 }
 
 interface Connection {
   path: string;
-  handle: Handle;
+  handle: Handle | null;
+  opening: Promise<void>;
+  closeTask: Promise<void> | null;
   pending: Chunk[];
   timer: ReturnType<typeof setTimeout> | null;
   closing: boolean;
   /** The renderer has been told that this connection ended. */
   ended: boolean;
+}
+
+// serialport 13's set() resets every output flag, including RTS. Its native
+// bindings also write RTS when it is omitted, so even DTR/BREAK cannot safely
+// use that API while the driver owns RTS for hardware flow control.
+const HARDWARE_LINES_ERROR =
+  'Manual DTR/RTS and BREAK are unavailable with RTS/CTS hardware flow control';
+
+function checkInitialLines(options: OpenOptions): void {
+  if (
+    options.flowControl === 'rtscts' &&
+    options.lines &&
+    (!options.lines.dtr || !options.lines.rts)
+  ) {
+    throw new Error(HARDWARE_LINES_ERROR);
+  }
 }
 
 export function classifyError(message: string): SerialErrorCode {
@@ -137,9 +162,11 @@ interface Callbacks {
 }
 
 function openSimulated(options: OpenOptions, cb: Callbacks): Handle {
+  checkInitialLines(options);
   const device = new SimulatedDevice(options.path, options.baudRate, {
     onData: (data) => cb.onData(data),
   });
+  let lines = options.lines ?? DEFAULT_LINES;
   return {
     write: (data) => {
       device.write(data);
@@ -150,58 +177,154 @@ function openSimulated(options: OpenOptions, cb: Callbacks): Handle {
       cb.onClose(false);
       return Promise.resolve();
     },
+    setLines: (next) => {
+      if (options.flowControl === 'rtscts') return Promise.reject(new Error(HARDWARE_LINES_ERROR));
+      lines = next;
+      return Promise.resolve();
+    },
+    getLines: () => Promise.resolve(device.modemLines(lines)),
+    sendBreak: () =>
+      options.flowControl === 'rtscts'
+        ? Promise.reject(new Error(HARDWARE_LINES_ERROR))
+        : Promise.resolve(),
   };
 }
 
 function openReal(options: OpenOptions, cb: Callbacks): Promise<Handle> {
   return new Promise((resolve, reject) => {
+    checkInitialLines(options);
+    const flow = options.flowControl ?? 'none';
     const port = new SerialPort({
       path: options.path,
       baudRate: options.baudRate,
       dataBits: options.dataBits,
       parity: PARITY[options.parity],
       stopBits: Number(options.stopBits) as 1 | 1.5 | 2,
+      rtscts: flow === 'rtscts',
+      xon: flow === 'xonxoff',
+      xoff: flow === 'xonxoff',
       autoOpen: false,
     });
+    let lines = options.lines ?? DEFAULT_LINES;
+    // set() replaces all output lines at once – missing ones fall back to the
+    // serialport defaults – so the current state always travels along.
+    const set = (next: ControlLines, brk: boolean): Promise<void> => {
+      if (flow === 'rtscts') return Promise.reject(new Error(HARDWARE_LINES_ERROR));
+      if (!port.isOpen) return Promise.reject(new Error('Port is not open'));
+      return new Promise((done, fail) =>
+        port.set({ ...next, brk }, (err) => (err ? fail(err) : done())),
+      );
+    };
+    // Keep BREAK and line updates ordered. A failed operation must not poison
+    // subsequent operations or update the last successfully applied state.
+    let controls = Promise.resolve();
+    const control = (operation: () => Promise<void>): Promise<void> => {
+      const result = controls.then(operation);
+      controls = result.catch(() => undefined);
+      return result;
+    };
     let intentional = false;
+    let ready = false;
+    let setupError: unknown;
+    let closing: Promise<void> | null = null;
     let presence: ReturnType<typeof setInterval> | null = null;
+    const close = (): Promise<void> => {
+      if (closing) return closing;
+      if (!port.isOpen) return Promise.resolve();
+      closing = new Promise<void>((done, fail) =>
+        port.close((err) => (err ? fail(err) : done())),
+      ).finally(() => {
+        closing = null;
+      });
+      return closing;
+    };
     port.on('data', (data: Buffer) => cb.onData(new Uint8Array(data)));
     port.on('error', (err: Error) => console.warn(`[serial] ${options.path}:`, err.message));
     port.on('close', (err?: Error & { disconnected?: boolean }) => {
       if (presence) clearInterval(presence);
-      cb.onClose(!intentional, err?.message);
+      presence = null;
+      if (ready) cb.onClose(!intentional, err?.message);
+      else
+        reject(
+          setupError instanceof Error
+            ? setupError
+            : (err ?? new Error('Port closed while opening')),
+        );
     });
     port.open((err) => {
       if (err) {
         reject(err);
         return;
       }
-      // macOS does not report every vanished device (virtual ports, some USB
-      // drivers) – the port then stays "open" forever and auto-reconnect never
-      // starts. Watching the device node catches that on every Unix system.
-      if (process.platform !== 'win32') {
-        presence = setInterval(() => {
-          access(options.path).catch(() => {
-            if (port.isOpen) port.close(() => undefined);
-          });
-        }, PRESENCE_MS);
-        presence.unref();
-      }
-      resolve({
+      const handle: Handle = {
         write: (data) =>
           new Promise<void>((done, fail) => {
+            if (!port.isOpen) return fail(new Error('Port is not open'));
             port.write(Buffer.from(data), (writeErr) => {
               if (writeErr) return fail(writeErr);
               port.drain((drainErr) => (drainErr ? fail(drainErr) : done()));
             });
           }),
-        close: () =>
-          new Promise<void>((done) => {
-            intentional = true;
-            if (!port.isOpen) return done();
-            port.close(() => done());
+        close: async () => {
+          intentional = true;
+          try {
+            await close();
+          } catch (error) {
+            intentional = false;
+            throw error;
+          }
+        },
+        setLines: (next) =>
+          control(async () => {
+            await set(next, false);
+            lines = { ...next };
           }),
-      });
+        getLines: () =>
+          new Promise<ModemLines>((done, fail) =>
+            port.get((getErr, status) =>
+              getErr
+                ? fail(getErr)
+                : done({ cts: !!status?.cts, dsr: !!status?.dsr, dcd: !!status?.dcd }),
+            ),
+          ),
+        sendBreak: (ms) =>
+          control(async () => {
+            await set(lines, true);
+            await new Promise((r) => setTimeout(r, ms));
+            await set(lines, false);
+          }),
+      };
+      void (async () => {
+        try {
+          if (lines.dtr !== DEFAULT_LINES.dtr || lines.rts !== DEFAULT_LINES.rts) {
+            await set(lines, false);
+          }
+          if (!port.isOpen) throw new Error('Port closed while opening');
+          // Some Unix drivers do not report a vanished device. Watching its
+          // node lets auto-reconnect recover without guessing a polling rate.
+          if (process.platform !== 'win32') {
+            presence = setInterval(() => {
+              void access(options.path).catch(() => {
+                void close().catch((error: unknown) =>
+                  console.warn('[serial] close failed:', error),
+                );
+              });
+            }, PRESENCE_MS);
+            presence.unref();
+          }
+          ready = true;
+          resolve(handle);
+        } catch (error) {
+          setupError = error;
+          intentional = true;
+          try {
+            await close();
+          } catch (closeError) {
+            console.warn('[serial] cleanup after failed open:', closeError);
+          }
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      })();
     });
   });
 }
@@ -210,10 +333,13 @@ function openReal(options: OpenOptions, cb: Callbacks): Promise<Handle> {
 
 export class SerialManager {
   private readonly connections = new Map<string, Connection>();
+  private readonly samples = new Map<string, { stop(): void; done: Promise<void> }>();
+  private closingAll: Promise<void> | null = null;
 
   constructor(private readonly emit: (event: SerialEvent) => void) {}
 
   private pathInUse(path: string, exceptId?: string): boolean {
+    if (this.samples.has(path)) return true;
     for (const [id, conn] of this.connections) {
       if (id !== exceptId && conn.path === path) return true;
     }
@@ -221,16 +347,24 @@ export class SerialManager {
   }
 
   async open(id: string, options: OpenOptions): Promise<Result> {
+    if (this.closingAll) return failure('Serial ports are closing');
     if (this.connections.has(id)) await this.close(id);
+    // Another open may have resumed from the same close while this one waited.
+    if (this.connections.has(id) || this.closingAll) return failure('Connection is busy', 'busy');
     if (this.pathInUse(options.path, id)) {
       return { ok: false, error: options.path, code: 'in-use' };
     }
 
     // Reserve the id before the asynchronous open so a quick second request
     // cannot open the same port twice.
+    let finishOpening!: () => void;
     const conn: Connection = {
       path: options.path,
-      handle: { write: () => Promise.resolve(), close: () => Promise.resolve() },
+      handle: null,
+      opening: new Promise<void>((done) => {
+        finishOpening = done;
+      }),
+      closeTask: null,
       pending: [],
       timer: null,
       closing: false,
@@ -246,15 +380,20 @@ export class SerialManager {
       conn.handle = isSimulatedPath(options.path)
         ? openSimulated(options, callbacks)
         : await openReal(options, callbacks);
+      if (conn.closing || conn.ended) return failure('Connection closed while opening');
       return { ok: true };
     } catch (err) {
+      if (conn.timer) clearTimeout(conn.timer);
+      conn.pending = [];
       if (this.connections.get(id) === conn) this.connections.delete(id);
       return failure(err);
+    } finally {
+      finishOpening();
     }
   }
 
   private received(id: string, conn: Connection, data: Uint8Array): void {
-    if (!data.length) return;
+    if (!data.length || conn.closing || conn.ended) return;
     conn.pending.push({ t: now(), data });
     conn.timer ??= setTimeout(() => this.flush(id, conn), BATCH_MS);
   }
@@ -279,21 +418,66 @@ export class SerialManager {
   async close(id: string): Promise<void> {
     const conn = this.connections.get(id);
     if (!conn) return;
+    if (conn.closeTask) return conn.closeTask;
     conn.closing = true;
     this.flush(id, conn);
-    try {
-      await conn.handle.close();
-    } catch (err) {
-      console.warn('[serial] close failed:', err);
-    }
-    this.closed(id, conn, false);
+    conn.closeTask = (async () => {
+      await conn.opening;
+      try {
+        // Do not wait for writes/drain: closing the driver is what cancels them.
+        await conn.handle?.close();
+        this.closed(id, conn, false);
+      } catch (err) {
+        conn.closing = false;
+        conn.closeTask = null;
+        throw err;
+      }
+    })();
+    return conn.closeTask;
   }
 
   async write(id: string, data: Uint8Array): Promise<Result> {
-    const conn = this.connections.get(id);
-    if (!conn || conn.closing) return { ok: false, error: 'not connected', code: 'unknown' };
+    const handle = this.live(id);
+    if (!handle) return { ok: false, error: 'not connected', code: 'unknown' };
     try {
-      await conn.handle.write(data);
+      await handle.write(data);
+      return { ok: true };
+    } catch (err) {
+      return failure(err);
+    }
+  }
+
+  private live(id: string): Handle | null {
+    const conn = this.connections.get(id);
+    return conn && !conn.closing && !conn.ended ? conn.handle : null;
+  }
+
+  async setLines(id: string, lines: ControlLines): Promise<Result> {
+    const handle = this.live(id);
+    if (!handle) return { ok: false, error: 'not connected', code: 'unknown' };
+    try {
+      await handle.setLines(lines);
+      return { ok: true };
+    } catch (err) {
+      return failure(err);
+    }
+  }
+
+  async getLines(id: string): Promise<ValueResult<ModemLines>> {
+    const handle = this.live(id);
+    if (!handle) return { ok: false, error: 'not connected', code: 'unknown' };
+    try {
+      return { ok: true, value: await handle.getLines() };
+    } catch (err) {
+      return failure(err);
+    }
+  }
+
+  async sendBreak(id: string, ms: number): Promise<Result> {
+    const handle = this.live(id);
+    if (!handle) return { ok: false, error: 'not connected', code: 'unknown' };
+    try {
+      await handle.sendBreak(ms);
       return { ok: true };
     } catch (err) {
       return failure(err);
@@ -302,6 +486,7 @@ export class SerialManager {
 
   /** Listens on a port for `ms` milliseconds (baud rate scanner). */
   async sample(path: string, baudRate: number, ms: number): Promise<ValueResult<Uint8Array>> {
+    if (this.closingAll) return failure('Serial ports are closing');
     if (this.pathInUse(path)) return { ok: false, error: path, code: 'in-use' };
     const parts: Uint8Array[] = [];
     let total = 0;
@@ -315,16 +500,37 @@ export class SerialManager {
       },
       onClose: () => undefined,
     };
-    let handle: Handle;
+    let stop!: () => void;
+    let finish!: () => void;
+    const stopped = new Promise<void>((done) => {
+      stop = done;
+    });
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    this.samples.set(path, { stop, done });
+    let handle: Handle | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       handle = isSimulatedPath(path)
         ? openSimulated(options, callbacks)
         : await openReal(options, callbacks);
+      await Promise.race([
+        stopped,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, ms);
+        }),
+      ]);
     } catch (err) {
       return failure(err);
+    } finally {
+      clearTimeout(timer);
+      await handle
+        ?.close()
+        .catch((error: unknown) => console.warn('[serial] sample close failed:', error));
+      this.samples.delete(path);
+      finish();
     }
-    await new Promise((r) => setTimeout(r, ms));
-    await handle.close().catch(() => undefined);
     const out = new Uint8Array(Math.min(total, 4096));
     let offset = 0;
     for (const p of parts) {
@@ -337,6 +543,23 @@ export class SerialManager {
   }
 
   async closeAll(): Promise<void> {
-    await Promise.all([...this.connections.keys()].map((id) => this.close(id)));
+    if (this.closingAll) return this.closingAll;
+    const samples = [...this.samples.values()];
+    for (const sample of samples) sample.stop();
+    this.closingAll = (async () => {
+      const results = await Promise.allSettled([
+        ...[...this.connections.keys()].map((id) => this.close(id)),
+        ...samples.map((sample) => sample.done),
+      ]);
+      const errors = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason as unknown] : [],
+      );
+      if (errors.length) throw new AggregateError(errors, 'Could not close all serial ports');
+    })();
+    try {
+      await this.closingAll;
+    } finally {
+      this.closingAll = null;
+    }
   }
 }

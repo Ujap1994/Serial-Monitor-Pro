@@ -6,6 +6,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.1.0] – 2026-10-31
+
+### Added
+
+- **CRC transmission**: persistent little-/big-endian selection, signed insertion position,
+  automatic CRC for manual Monitor input, independent header/footer coverage and exact HEX previews.
+  Position `0` appends, `1` inserts before the second byte, and `-1` before the penultimate byte.
+  Invalid positions and mismatching framing block transmission. Separate line endings are added last.
+- **Flow control and signals**: none, RTS/CTS or XON/XOFF; manual DTR/RTS with supported modes;
+  CTS/DSR/DCD indicators and a 250 ms BREAK action. RTS/CTS reserves signal control for the driver.
+- **Send file**: binary blocks or preserved text lines, configurable block size and pause, progress,
+  cancellation, and protection against interleaved Monitor writes. Files remain byte-for-byte unchanged.
+- **Update notice**: startup/manual checks, release links and cumulative changes from every newer
+  stable release, including paginated feeds; per-version skip and an automatic-check setting.
+- **Distribution**: macOS Universal DMG/ZIP and native x64/arm64 Snap builds alongside existing packages.
+- **Collaboration**: shared Codex/Claude work ledger and repository entry-point instructions.
+- Expanded English guide with anonymized screenshots, code audit/CLI assessment and a long-run checklist.
+
+### Fixed
+
+- A single instance now owns each application profile. Closing the last window also exits on macOS;
+  final settings saves, log writes and serial shutdown complete before exit.
+- Requested control-line failures are reported instead of silently accepted; hardware flow control
+  cannot be overwritten by manual line or BREAK operations.
+- Opening, closing and scanning ports reserve ownership throughout asynchronous transitions.
+- Cancelling file transmission closes the port to release stalled writes, and pause listeners are
+  removed after each block. Progress counts completed writes rather than claiming device acknowledgement.
+- Release notes are rendered as text/Markdown elements without HTML execution; version validation,
+  duplicate filtering, request deadlines and pagination errors have dedicated regression tests.
+
+### Tests
+
+- Known-vector CRC packet tests cover byte order, signed offsets, all input formats, independent
+  framing coverage and invalid input. Electron tests verify actual simulator sends and saved settings.
+- Driver-mock tests exercise line failures and port lifecycle races. Electron tests cover file bytes,
+  cancellation/reconnect, cumulative update notes, single-instance behaviour and immediate-close persistence.
+- No physical device was opened during this change; hardware/long-run acceptance remains a separate step.
+
 ## [1.0.2] – 2026-10-18
 
 ### Fixed
@@ -78,7 +116,8 @@ First open-source release – a complete rewrite in TypeScript/Electron.
 - The licence manager, licence server, admin tool and all build scripts of the former Python version.
   Every function is available to everyone.
 
-[Unreleased]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Ujap1994/Serial-Monitor-Pro/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v1.0.0

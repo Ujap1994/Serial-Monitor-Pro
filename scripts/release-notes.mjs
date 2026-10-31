@@ -18,23 +18,42 @@ const files = readdirSync(dist);
 const ROWS = [
   ['**Windows** – installer', (f) => f.endsWith('-setup.exe')],
   ['**Windows** – portable', (f) => f.endsWith('-portable.exe')],
-  ['**macOS**', (f) => f.endsWith('.dmg')],
+  ['**macOS** – disk image', (f) => f.endsWith('.dmg')],
+  ['**macOS** – ZIP archive', (f) => f.includes('-macos-') && f.endsWith('.zip')],
   ['**Debian · Ubuntu · Mint · Pop!_OS**', (f) => f.endsWith('.deb')],
   ['**Fedora · RHEL · openSUSE**', (f) => f.endsWith('.rpm')],
   ['**Arch · Manjaro · EndeavourOS · CachyOS**', (f) => f.endsWith('.pacman')],
   ['**Flatpak** (all distributions)', (f) => f.endsWith('.flatpak')],
+  ['**Snap** (distributions with snapd)', (f) => f.endsWith('.snap')],
   ['**AppImage** (all distributions)', (f) => f.endsWith('.AppImage')],
   ['**tar.gz** (all distributions)', (f) => f.endsWith('.tar.gz')],
 ];
 
+const architectures = ['x64', 'arm64', 'universal'];
 const arch = (f) =>
-  /(arm64|aarch64)/.test(f) ? 'arm64' : /(x64|amd64|x86_64)/.test(f) ? 'x64' : '';
+  /-universal\./.test(f)
+    ? 'universal'
+    : /(arm64|aarch64)/.test(f)
+      ? 'arm64'
+      : /(x64|amd64|x86_64)/.test(f)
+        ? 'x64'
+        : '';
 const link = (f) => (f ? `[\`${f}\`](${repo}/releases/download/v${version}/${f})` : '–');
 
-const table = ROWS.map(([label, match]) => {
+const table = ROWS.flatMap(([label, match]) => {
   const found = files.filter(match);
-  return `| ${label} | ${link(found.find((f) => arch(f) === 'x64'))} | ${link(found.find((f) => arch(f) === 'arm64'))} |`;
-}).filter((row) => !row.endsWith('| – | – |'));
+  const downloads = architectures.map((a) => found.find((f) => arch(f) === a));
+  return downloads.some(Boolean) ? [`| ${label} | ${downloads.map(link).join(' | ')} |`] : [];
+});
+
+const snapInstructions = files.some((f) => f.endsWith('.snap'))
+  ? `Snap packages use strict confinement. Install a downloaded package with
+\`sudo snap install --dangerous <downloaded-file>.snap\`. Serial devices require an explicit
+interface connection: list available slots with \`snap interface serial-port\`, then run
+\`sudo snap connect serial-monitor-pro:serial-port <slot>\`.
+For USB adapters, follow the [snapd hotplug instructions](https://snapcraft.io/docs/explanation/how-snaps-work/hotplug-support/).
+\n`
+  : '';
 
 const changelog = readFileSync('CHANGELOG.md', 'utf8');
 const section =
@@ -46,16 +65,22 @@ const section =
     .join('\n')
     .trim() ?? '';
 
-console.log(`## Downloads
+console.log(`> [!WARNING]
+> Serial Monitor Pro is open-source software and may contain errors or bugs. It comes without
+> warranty. Verify behaviour on your test setup before relying on it with equipment.
 
-| System | x64 (Intel / AMD) | arm64 (Apple Silicon / ARM) |
-|---|---|---|
+<img src="${repo}/raw/v${version}/assets/brand/logo.svg" width="64" alt="Serial Monitor Pro logo">
+
+## Downloads
+
+| System | x64 (Intel / AMD) | arm64 (Apple Silicon / ARM) | Universal (macOS) |
+|---|---|---|---|
 ${table.join('\n')}
 
 Installation instructions for every platform: [README → Installation](${repo}#-installation) ·
 verify downloads with \`SHA256SUMS.txt\`.
 
-> [!NOTE]
+${snapInstructions}> [!NOTE]
 > The builds are not signed with a paid certificate. Windows SmartScreen and macOS Gatekeeper therefore
 > show a warning on first start – the README explains how to open the app anyway.
 

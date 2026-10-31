@@ -54,6 +54,7 @@ export async function launch(profile: string): Promise<{ app: ElectronApplicatio
       ...process.env,
       SMP_USER_DATA_DIR: profile,
       SMP_NO_LEGACY_IMPORT: '1',
+      SMP_NO_UPDATE_CHECK: '1',
       NODE_ENV: 'production',
     },
   });

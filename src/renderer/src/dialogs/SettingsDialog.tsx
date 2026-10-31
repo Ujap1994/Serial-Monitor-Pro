@@ -98,6 +98,16 @@ export function SettingsDialog({ onClose }: { onClose: () => void }): ReactNode 
           />
         </Field>
       </div>
+      <div className="row">
+        <Check
+          checked={s.updateCheck}
+          onChange={(updateCheck) => set({ updateCheck })}
+          testId="settings-updatecheck"
+        >
+          {t('settings.updateCheck')}
+        </Check>
+      </div>
+      <div className="field-hint">{t('settings.updateHint')}</div>
 
       <div className="section-title">{t('settings.display')}</div>
       <div className="form-grid">

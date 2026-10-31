@@ -105,6 +105,16 @@ button {
   display: none;
 }
 
+.page-crc {
+  overflow: auto;
+}
+.page-crc > .card {
+  flex-shrink: 0;
+}
+.page-crc > .card-fill {
+  min-height: 250px;
+}
+
 .page-header {
   display: flex;
   align-items: flex-end;
@@ -1402,4 +1412,173 @@ a {
 }
 a:hover {
   text-decoration: underline;
+}
+
+/* ── Control lines (DTR/RTS switches, CTS/DSR/DCD indicators) ─────────────── */
+.control-lines {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+.control-lines .divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--border);
+}
+.line-switch,
+.line-led {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+.line-switch {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+}
+.line-switch:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.line-switch:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.line-switch[aria-pressed='true'] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+.line-switch i,
+.line-led i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.line-switch[aria-pressed='true'] i {
+  background: var(--primary);
+}
+.line-led[data-state='on'] {
+  color: var(--success);
+}
+.line-led[data-state='on'] i {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+.line-led[data-state='off'] i {
+  background: var(--faint);
+}
+.line-led[data-state='unknown'] {
+  opacity: 0.55;
+}
+
+/* ── Update notice ────────────────────────────────────────────────────────── */
+.update-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.update-link:hover {
+  text-decoration: underline;
+}
+.release-notes {
+  max-height: 46vh;
+  overflow: auto;
+  padding-right: 6px;
+}
+.release + .release {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.release h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.release h4 .muted {
+  font-weight: 500;
+  font-size: 12px;
+}
+.release-link {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+}
+.markdown {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.markdown h5 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.markdown ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.markdown li + li {
+  margin-top: 4px;
+}
+.markdown p {
+  margin: 6px 0;
+}
+.markdown code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+}
+
+/* ── Send file ────────────────────────────────────────────────────────────── */
+.small {
+  font-size: 12px;
+}
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.progress {
+  position: relative;
+  height: 22px;
+  margin-top: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+.progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--success-soft);
+  border-right: 2px solid var(--success);
+  transition: width 0.12s linear;
+}
+.progress span {
+  position: relative;
+  display: block;
+  line-height: 22px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
 }

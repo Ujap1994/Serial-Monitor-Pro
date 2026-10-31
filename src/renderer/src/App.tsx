@@ -3,8 +3,10 @@ import { ModalHost, Toasts } from './components/Modal';
 import { ConnectionBar, StatusBar, TabBar } from './components/Shell';
 import { AboutDialog } from './dialogs/AboutDialog';
 import { BaudScanDialog } from './dialogs/BaudScanDialog';
+import { SendFileDialog } from './dialogs/SendFileDialog';
 import { SettingsDialog } from './dialogs/SettingsDialog';
 import { ShortcutsDialog } from './dialogs/ShortcutsDialog';
+import { UpdateDialog } from './dialogs/UpdateDialog';
 import { useStore } from './lib/store';
 import { AutomationPage } from './pages/AutomationPage';
 import { CrcPage } from './pages/CrcPage';
@@ -21,6 +23,7 @@ import { exportCommands, importCommands } from './state/commands';
 import { exportCsv, exportText } from './state/export';
 import { clearMonitor, refreshPorts, toggleConnection } from './state/serial';
 import { openDialog, uiStore } from './state/ui';
+import { checkForUpdates } from './state/updates';
 
 const PAGES: Record<TabId, () => ReactNode> = {
   monitor: MonitorPage,
@@ -61,6 +64,10 @@ function runMenuAction(action: string): void {
     case 'baud-scan':
       if (appStore.get().connection === 'disconnected') openDialog('baudscan');
       return;
+    case 'send-file':
+      return openDialog('sendfile');
+    case 'check-updates':
+      return void checkForUpdates(true);
     default:
       if (action.startsWith('theme:')) {
         const theme = action.slice(6);
@@ -106,6 +113,10 @@ function GlobalDialogs(): ReactNode {
       return <BaudScanDialog onClose={close} />;
     case 'shortcuts':
       return <ShortcutsDialog onClose={close} />;
+    case 'sendfile':
+      return <SendFileDialog onClose={close} />;
+    case 'update':
+      return <UpdateDialog onClose={close} />;
     case null:
       return null;
   }
@@ -126,7 +137,12 @@ export function App(): ReactNode {
           // All pages stay mounted: running sequences, decoders and graphs keep
           // working while another tab is shown.
           return (
-            <section key={id} className="page" hidden={tab !== id} data-testid={`page-${id}`}>
+            <section
+              key={id}
+              className={`page page-${id}`}
+              hidden={tab !== id}
+              data-testid={`page-${id}`}
+            >
               <Page />
             </section>
           );

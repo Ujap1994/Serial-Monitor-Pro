@@ -95,6 +95,7 @@ async function start({ theme = 'light', settings = {} } = {}) {
       SMP_USER_DATA_DIR: profile,
       SMP_NO_LEGACY_IMPORT: '1',
       SMP_SIMULATED_ONLY: '1',
+      SMP_NO_UPDATE_CHECK: '1',
     },
   });
   const page = await app.firstWindow();
@@ -353,9 +354,73 @@ async function guide() {
       $('crc-compare'),
       $('crc-check-vector'),
       $('crc-result'),
+      $('crc-endian'),
+      $('crc-position'),
+      [$('crc-header'), $('crc-include-header')],
+      [$('crc-footer'), $('crc-include-footer')],
+      $('crc-auto'),
     ]);
     await $('crc-compare').click();
     await shot(page, file('crc-compare'), [$('crc-table')]);
+
+    await button(crc, m('crc.single')).click();
+    await $('crc-input').fill('AA 55 31 32 33 34 35 36 37 38 39 0D 0A');
+    await $('crc-header').fill('AA 55');
+    await $('crc-footer').fill('0D 0A');
+    await $('crc-include-header').uncheck();
+    await $('crc-include-footer').uncheck();
+    await $('crc-position').fill('-1');
+    await $('crc-position').press('Enter');
+    await $('crc-auto').check();
+    await shot(page, file('crc-framing'), [
+      $('crc-input'),
+      $('crc-position'),
+      $('crc-include-header'),
+      $('crc-include-footer'),
+      $('crc-packet'),
+    ]);
+    await $('tab-monitor').click();
+    await $('send-input').fill('AA 55 31 32 33 34 35 36 37 38 39 0D 0A');
+    await shot(page, file('crc-monitor'), [
+      $('monitor-crc-auto'),
+      $('send-input'),
+      $('send-preview'),
+    ]);
+    await $('monitor-crc-auto').uncheck();
+    await $('send-input').fill('');
+
+    await shot(page, file('control-lines'), [
+      $('flow-select'),
+      $('line-dtr'),
+      $('line-rts'),
+      [$('line-cts'), $('line-dsr'), $('line-dcd')],
+      $('line-break'),
+    ]);
+    await $('send-file').click();
+    await shot(page, file('send-file'), [
+      page.getByRole('button', { name: m('sendfile.choose'), exact: true }),
+      $('sendfile-mode'),
+      $('sendfile-block'),
+      $('sendfile-pause'),
+      $('sendfile-start'),
+    ]);
+    await page.keyboard.press('Escape');
+
+    // Fictional release notes, clearly labelled as a demonstration in the guide.
+    await app.evaluate(
+      (_, feed) => {
+        process.env.SMP_UPDATE_FEED = feed;
+      },
+      join(root, 'tests/e2e/data/releases.json'),
+    );
+    await menu(app, 'check-updates');
+    await $('update-dialog').waitFor();
+    await shot(page, file('updates'), [
+      $('update-summary'),
+      $('update-changes'),
+      page.getByRole('button', { name: m('update.download'), exact: true }),
+    ]);
+    await page.keyboard.press('Escape');
 
     await $('tab-graph').click();
     const graph = $('page-graph');

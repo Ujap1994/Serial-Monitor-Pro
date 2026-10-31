@@ -5,7 +5,7 @@ import { resolveLanguage, setLanguage, type Language } from '@shared/i18n';
 import { normalizeCommand, type Command } from '@shared/core/commands';
 import { DEFAULT_SETTINGS, normalizeSettings, type Settings } from '@shared/core/settings';
 import { normalizeStep, type Step } from '@shared/core/steps';
-import type { AppInfo, PortInfo } from '@shared/ipc';
+import type { AppInfo, ModemLines, PortInfo, ReleaseInfo } from '@shared/ipc';
 import { createStore } from '../lib/store';
 
 export const TABS = [
@@ -25,6 +25,13 @@ export type TabId = (typeof TABS)[number];
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 export type Tone = 'info' | 'ok' | 'warn' | 'error';
 
+export interface UpdateState {
+  /** Releases newer than the running version, newest first – empty when up to date. */
+  newer: ReleaseInfo[];
+  /** Set when the last check failed. */
+  error: string | null;
+}
+
 export interface AppState {
   ready: boolean;
   info: AppInfo | null;
@@ -36,6 +43,9 @@ export interface AppState {
   ports: PortInfo[];
   connection: ConnectionState;
   connectedPath: string;
+  /** Inputs of the monitor port; null while disconnected or not reported. */
+  modemLines: ModemLines | null;
+  update: UpdateState | null;
   rxBytes: number;
   txBytes: number;
   rxRate: number;
@@ -57,6 +67,8 @@ export const appStore = createStore<AppState>({
   ports: [],
   connection: 'disconnected',
   connectedPath: '',
+  modemLines: null,
+  update: null,
   rxBytes: 0,
   txBytes: 0,
   rxRate: 0,
@@ -108,15 +120,17 @@ function persist(
 }
 
 /** Writes pending changes immediately (used before the window closes). */
-export function flushPersistence(): void {
+export async function flushPersistence(): Promise<void> {
   const s = appStore.get();
+  const saves: Promise<boolean>[] = [];
   for (const [name, timer] of timers) {
     clearTimeout(timer);
-    if (name === 'settings') void window.smp.store.save('settings', s.settings);
-    if (name === 'commands') void window.smp.store.save('commands', s.commands);
-    if (name === 'automation') void window.smp.store.save('automation', s.steps);
+    if (name === 'settings') saves.push(window.smp.store.save('settings', s.settings));
+    if (name === 'commands') saves.push(window.smp.store.save('commands', s.commands));
+    if (name === 'automation') saves.push(window.smp.store.save('automation', s.steps));
   }
   timers.clear();
+  await Promise.all(saves);
 }
 
 export function updateSettings(patch: Partial<Settings>): void {

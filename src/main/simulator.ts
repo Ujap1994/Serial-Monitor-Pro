@@ -5,7 +5,7 @@
 // Enable them in the settings or start the app with --simulator.
 
 import { t } from '@shared/i18n';
-import type { PortInfo } from '@shared/ipc';
+import type { ControlLines, ModemLines, PortInfo } from '@shared/ipc';
 import { readUInt, writeUInt, encodeUtf8, decodeLatin1 } from '@shared/core/bytes';
 import { calculateCrc } from '@shared/core/crc';
 import { buildModbusFrame } from '@shared/core/modbus';
@@ -152,6 +152,15 @@ export class SimulatedDevice {
     let crc = calculateCrc(body, 'CRC-8');
     if (this.tick % 7 === 0) crc ^= 0xff; // every 7th telegram is damaged
     this.emit(Uint8Array.of(...body, crc));
+  }
+
+  /**
+   * Inputs as the device sets them. The loopback is wired like a loopback
+   * plug (RTS → CTS, DTR → DSR and DCD); the other devices are always ready.
+   */
+  modemLines(control: ControlLines): ModemLines {
+    if (this.kind === 'loopback') return { cts: control.rts, dsr: control.dtr, dcd: control.dtr };
+    return { cts: true, dsr: true, dcd: true };
   }
 
   /** Called when the application writes to the device. */

@@ -73,18 +73,21 @@ settings and commands of the former Python version are imported automatically.
 
 Download the package for your system from the
 **[latest release](https://github.com/Ujap1994/Serial-Monitor-Pro/releases/latest)**.
-Every package is available for **x64** (Intel/AMD) and **arm64** (Apple Silicon, Snapdragon, Raspberry Pi 4/5 …).
+Packages are built for **x64** (Intel/AMD) and **arm64** (Apple Silicon, Snapdragon, Raspberry Pi 4/5 …). macOS also has **Universal** DMG and ZIP downloads containing both architectures.
 
-| System                                  | Package                                                         | Install                                                                         |
-| --------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Windows 10/11**                       | `…-windows-x64-setup.exe` / `…-windows-arm64-setup.exe`         | Run the installer. No installation wanted? Use `…-portable.exe`.                |
-| **macOS 11+**                           | `…-macos-arm64.dmg` (Apple Silicon) / `…-macos-x64.dmg` (Intel) | Open the DMG and drag the app to _Applications_.                                |
-| **Debian, Ubuntu, Mint, Pop!\_OS**      | `…-linux-amd64.deb` / `…-linux-arm64.deb`                       | `sudo apt install ./SerialMonitorPro-*.deb`                                     |
-| **Fedora, RHEL, openSUSE**              | `…-linux-x86_64.rpm` / `…-linux-aarch64.rpm`                    | `sudo dnf install ./SerialMonitorPro-*.rpm` (openSUSE: `sudo zypper install …`) |
-| **Arch, Manjaro, EndeavourOS, CachyOS** | `…-linux-x64.pacman` / `…-linux-aarch64.pacman`                 | `sudo pacman -U SerialMonitorPro-*.pacman`                                      |
-| **Any distribution** – Flatpak          | `…-linux-x86_64.flatpak` / `…-linux-aarch64.flatpak`            | `flatpak install --user SerialMonitorPro-*.flatpak`                             |
-| **Any distribution** – AppImage         | `…-linux-x86_64.AppImage` / `…-linux-arm64.AppImage`            | `chmod +x SerialMonitorPro-*.AppImage && ./SerialMonitorPro-*.AppImage`         |
-| **Any distribution** – archive          | `…-linux-x64.tar.gz` / `…-linux-arm64.tar.gz`                   | Extract and start `serial-monitor-pro`.                                         |
+| System                                  | Package                                                         | Install                                                                                   |
+| --------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Windows 10/11**                       | `…-windows-x64-setup.exe` / `…-windows-arm64-setup.exe`         | Run the installer. No installation wanted? Use `…-portable.exe`.                          |
+| **macOS 11+**                           | `…-macos-arm64.dmg` (Apple Silicon) / `…-macos-x64.dmg` (Intel) | Open the DMG and drag the app to _Applications_.                                          |
+| **Debian, Ubuntu, Mint, Pop!\_OS**      | `…-linux-amd64.deb` / `…-linux-arm64.deb`                       | `sudo apt install ./SerialMonitorPro-*.deb`                                               |
+| **Fedora, RHEL, openSUSE**              | `…-linux-x86_64.rpm` / `…-linux-aarch64.rpm`                    | `sudo dnf install ./SerialMonitorPro-*.rpm` (openSUSE: `sudo zypper install …`)           |
+| **Arch, Manjaro, EndeavourOS, CachyOS** | `…-linux-x64.pacman` / `…-linux-aarch64.pacman`                 | `sudo pacman -U SerialMonitorPro-*.pacman`                                                |
+| **Any distribution** – Flatpak          | `…-linux-x86_64.flatpak` / `…-linux-aarch64.flatpak`            | `flatpak install --user SerialMonitorPro-*.flatpak`                                       |
+| **Any distribution** – AppImage         | `…-linux-x86_64.AppImage` / `…-linux-arm64.AppImage`            | `chmod +x SerialMonitorPro-*.AppImage && ./SerialMonitorPro-*.AppImage`                   |
+| **Distributions with snapd**            | `…-linux-x64.snap` / `…-linux-arm64.snap`                       | `sudo snap install --dangerous ./SerialMonitorPro-*.snap` (see serial permissions below). |
+| **Any distribution** – archive          | `…-linux-x64.tar.gz` / `…-linux-arm64.tar.gz`                   | Extract and start `serial-monitor-pro`.                                                   |
+
+macOS ZIP archives are available alongside the DMGs; choose `…-macos-universal` to use the same download on Intel and Apple Silicon. Snap packages use strict confinement: list serial slots with `snap interface serial-port`, then connect the appropriate one with `sudo snap connect serial-monitor-pro:serial-port <slot>`. USB hotplug may require [snapd configuration](https://snapcraft.io/docs/explanation/how-snaps-work/hotplug-support/). If the host exposes no suitable slot, use another package format.
 
 Verify downloads with `SHA256SUMS.txt` from the release: `sha256sum -c SHA256SUMS.txt --ignore-missing`.
 
@@ -421,8 +424,69 @@ layout does not match yet.
    find out which algorithm produced it.
 6. **Check vector "123456789"** – the standard test input; compare the result with the _check_ value
    of a data sheet to confirm the right algorithm.
-7. **Result** – hexadecimal, decimal, binary and as bytes in both byte orders. Below it, the data with
-   the checksum appended in big- and little-endian, ready to copy into a command.
+7. **Result** – hexadecimal, decimal, binary and checksum bytes in both byte orders. The lower
+   preview shows the exact packet for the selected byte order and insertion position.
+8. **CRC byte order** – Little-Endian sends the least significant byte first; Big-Endian sends it
+   last. A one-byte CRC is identical in either order. This does not reverse the input bytes.
+9. **Insert position** – a signed position in the original input, before CRC insertion (see below).
+10. **Existing header (HEX)** and **Include header in CRC** – describe the bytes already at the
+    beginning of the input. Clear the checkbox to exclude only these bytes from the calculation.
+11. **Existing footer (HEX)** and **Include footer in CRC** – the same for the end of the input.
+    Framing remains in the transmitted packet either way. Leave the fields empty if unused.
+12. **Automatically calculate and insert CRC in the Monitor input** – enables the same settings
+    for every manual Monitor send. The algorithm, order, position, framing and checkbox states
+    are saved and restored when the application restarts.
+
+The framing fields identify existing bytes: they do **not** add header/footer bytes themselves.
+A mismatching or overlapping header/footer produces an error and blocks automatic transmission.
+The CRC is calculated over the selected original bytes once, then inserted as new bytes; no
+placeholder is overwritten. Do not include a previously calculated CRC in the input unless your
+protocol explicitly requires checksumming that byte sequence too.
+
+#### Signed insertion positions
+
+For the original packet `11 22 33 44`, with `CC DD` representing a two-byte checksum:
+
+| Position | Packet after insertion | Meaning                                                        |
+| -------- | ---------------------- | -------------------------------------------------------------- |
+| `0`      | `11 22 33 44 CC DD`    | Append after all original bytes, including a footer if present |
+| `1`      | `11 CC DD 22 33 44`    | Insert before the second byte                                  |
+| `2`      | `11 22 CC DD 33 44`    | Insert before the third byte                                   |
+| `-1`     | `11 22 CC DD 33 44`    | Insert before the penultimate byte                             |
+| `-2`     | `11 CC DD 22 33 44`    | One byte further to the left                                   |
+| `-3`     | `CC DD 11 22 33 44`    | Insert before the first byte                                   |
+
+For `N` original bytes, positive positions use that zero-based offset; negative positions use
+`N + position - 1`. Zero is the special append operation. Out-of-range positions are errors,
+never silently moved. For a one-byte footer, use positive position `N - 1`; `-1` intentionally
+means the **penultimate**, not the last byte.
+
+![CRC framing and coverage example](docs/images/guide/crc-framing.png)
+
+Example (numbered in the picture): **1** input
+`AA 55 31 32 33 34 35 36 37 38 39 0D 0A`; **2** position `-1`; **3–4** exclude header
+`AA 55` and footer `0D 0A`. With CRC-16/MODBUS and Little-Endian, the covered bytes are ASCII
+`123456789`, whose CRC is `4B37`. **5** The resulting packet is
+`AA 55 31 32 33 34 35 36 37 38 39 37 4B 0D 0A`.
+
+#### Automatic CRC in the Monitor
+
+![Monitor with automatic CRC and the actual send preview](docs/images/guide/crc-monitor.png)
+
+**1** Enable Automatic CRC (or use the checkbox in CRC Tools), **2** enter the original packet
+without its CRC, and inspect **3** the HEX send preview before pressing Send. The CRC settings
+button opens the calculator. The preview includes the Monitor's selected line ending.
+
+The selected Monitor line ending is added **after** CRC insertion; it is outside CRC coverage
+and position counting. For the framed example above choose line ending **none**, since `0D 0A`
+is already part of the input. If you need a line ending to participate in the CRC, include its
+bytes explicitly in the input and select **none** for the separate line-ending control.
+
+Automatic CRC applies only to the manual Monitor input. Quick presets, the Send Table,
+automation, and file transfers retain their configured bytes; this prevents a second CRC being
+added to existing complete commands. For those tools, copy the calculator's final HEX packet
+and disable automatic CRC if pasting it into the manual Monitor input. Changing the Monitor
+display format never changes the bytes sent.
 
 ![All CRC algorithms compared](docs/images/guide/crc-compare.png)
 
@@ -553,6 +617,75 @@ send format to HEX and the line end to _none_ (an appended `0A` would break the 
 - **Former Python version** – on the first start its settings, presets and sequences are taken over
   automatically, if present.
 
+### Flow control and control lines
+
+![Flow control, DTR/RTS and modem input indicators](docs/images/guide/control-lines.png)
+
+1. **Flow** is chosen while disconnected: **none**, **RTS/CTS** hardware handshaking or
+   **XON/XOFF** software handshaking. Both endpoints and the cable must support the selected
+   method. XON/XOFF uses control bytes `11` and `13`; arbitrary binary protocols must explicitly
+   support this to avoid interpreting payload bytes as flow commands.
+2. **DTR** is a requested output state. Clicking toggles it when supported; while disconnected
+   the value is saved for the next open. Some boards reset on DTR changes or on opening a port.
+   A saved DTR-off setting is applied _after_ the driver opens the port and cannot guarantee
+   suppression of that initial reset pulse.
+3. **RTS** can be set manually with flow set to none or XON/XOFF. With RTS/CTS the driver controls
+   RTS. Manual DTR/RTS and BREAK are then disabled because the serial driver API could otherwise
+   alter RTS as a side effect. DTR uses the driver's opening default in that mode.
+4. **CTS, DSR, DCD** show reported input states, polled every 250 ms while connected. An unknown
+   indication means the driver does not report them; it does not prove that the signal is low.
+5. **Break** requests a 250 ms break signal. It is a line condition, not a transmitted zero byte.
+   The driver must support it. Failed output changes show an error and do not update the saved
+   state as though they had succeeded.
+
+These settings apply to the Monitor connection. Multi-Port and baud scanning use their own
+basic serial configurations. The simulator can exercise UI state changes but cannot verify
+physical handshaking or voltage levels.
+
+### Sending a file
+
+![File send dialog with transfer controls](docs/images/guide/send-file.png)
+
+Open **File …** beside the Monitor send field, or **File → Send file…**. Connect first, then:
+
+1. **Choose file …** selects a local file, up to 16 MiB; it is read into memory.
+2. **Send as** chooses fixed-size blocks or line-by-line transfer. Line mode preserves the
+   original LF/CRLF bytes; lines longer than the block size are split into smaller pieces.
+3. **Block size** limits each write to 1–4096 bytes (default 64).
+4. **Pause between pieces** adds 0–60000 ms after each piece except the last (default 10 ms).
+   Start conservatively and measure the receiving device; there is no ACK/retry protocol.
+5. **Send** starts the transfer. The progress bar counts completed writes, not acknowledgements
+   from the receiving application. The Monitor records the start and outcome, and TX counts
+   include all successfully written pieces. The estimated duration assumes 8N1 and excludes
+   device/driver stalls; other serial formats can take longer.
+
+Files are sent byte for byte: no automatic CRC, no extra newline, no encoding conversion.
+During a transfer other Monitor writes are rejected to avoid interleaving. Starting while a
+sequence or automation is active is also refused. Cancel or closing the file dialog disconnects
+an active transfer to release a write blocked by flow control; reconnect before continuing.
+Data already buffered by the OS or device cannot be recalled, and an aborted final write may
+have sent some bytes that are not counted as completed.
+
+### Update notice and cumulative changes
+
+![Update notice with cumulative release changes](docs/images/guide/updates.png)
+
+The picture uses a **fictional test release feed**, not real release promises.
+
+1. The notice compares the latest stable release to the running application version.
+2. **Changes since version …** contains every newer published stable release, newest first,
+   including intermediate versions. Pagination is followed; failed requests show an error
+   instead of presenting partial notes as complete. Drafts and prereleases are excluded.
+3. **Open download page** opens GitHub Releases in the system browser. Installation remains
+   manual. **Later** closes the notice; **Skip this version** suppresses the automatic popup
+   for that version only. Manual checking and the status-bar update link remain available.
+
+Automatic checking runs shortly after startup and can be disabled in **Settings**. Use
+**Help → Check for updates…** or the About dialog to check manually. Offline checks and GitHub
+rate limits are reported for manual checks; startup failures stay quiet. The update check sends
+no serial content or device names, but GitHub receives normal network metadata, including the
+requesting IP address. No update package is downloaded or installed automatically.
+
 ### 16. Troubleshooting
 
 <details>
@@ -601,9 +734,10 @@ after connecting is the bootloader. This is a property of the board, not of the 
 <details>
 <summary><b>Data is lost at high baud rates</b></summary>
 
-Simple USB adapters have small buffers – the USB chip of an Arduino Uno, for example, holds 128 bytes and
-loses data under sustained load above 115200 baud. Use a lower baud rate, flow control on the device
-side, or an adapter with larger buffers (FTDI, CP2102N). `npm run test:hardware` measures what an
+Sustained throughput depends on the adapter firmware, driver, baud rate and the receiving device.
+A packet-paced loopback may pass while an uninterrupted stream loses bytes. Measure your exact
+setup; reduce the block size, add pauses or use supported flow control. Do not assume a universal
+Arduino buffer size or baud-rate limit. `npm run test:hardware` measures what an
 adapter manages, see [Testing with your own hardware](#testing-with-your-own-hardware).
 
 </details>
@@ -776,3 +910,9 @@ independently wherever they matter. See also the [MIT licence](LICENSE).
 ## 📄 License
 
 Released under the [MIT licence](LICENSE).
+
+## Development priorities and collaboration
+
+See the [code audit and CLI assessment](docs/DEVELOPMENT_STATUS.md),
+[long-run test checklist](docs/LONG_RUN_TEST_CHECKLIST.md), and the shared
+[Codex / Claude Code work ledger](AGENT_COORDINATION.md).

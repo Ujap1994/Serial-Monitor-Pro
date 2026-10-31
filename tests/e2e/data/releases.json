@@ -1,0 +1,38 @@
+[
+  {
+    "tag_name": "v99.1.0",
+    "name": "Serial Monitor Pro 99.1.0",
+    "html_url": "https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v99.1.0",
+    "published_at": "2099-03-01T10:00:00Z",
+    "draft": false,
+    "prerelease": false,
+    "body": "## Downloads\n\n| System | x64 | arm64 |\n|---|---|---|\n| **Windows** | a | b |\n\n## Changes\n\n### Added\n\n- **Plot export**: save the live graph as an image.\n\n### Fixed\n\n- The baud rate scanner remembers the last port."
+  },
+  {
+    "tag_name": "v99.2.0-beta.1",
+    "name": "Pre-release",
+    "html_url": "https://example.invalid",
+    "published_at": "2099-04-01T10:00:00Z",
+    "draft": false,
+    "prerelease": true,
+    "body": "## Changes\n\n- must not be shown"
+  },
+  {
+    "tag_name": "v99.0.0",
+    "name": "Serial Monitor Pro 99.0.0",
+    "html_url": "https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v99.0.0",
+    "published_at": "2099-01-15T10:00:00Z",
+    "draft": false,
+    "prerelease": false,
+    "body": "## Downloads\n\n| System | x64 | arm64 |\n|---|---|---|\n\n## Changes\n\n### Changed\n\n- Faster monitor with `1 000 000` lines.\n- See the [user guide](https://github.com/Ujap1994/Serial-Monitor-Pro#-user-guide)."
+  },
+  {
+    "tag_name": "v0.9.0",
+    "name": "Serial Monitor Pro 0.9.0",
+    "html_url": "https://example.invalid",
+    "published_at": "2020-01-01T10:00:00Z",
+    "draft": false,
+    "prerelease": false,
+    "body": "## Changes\n\n- an old release that must not be shown"
+  }
+]

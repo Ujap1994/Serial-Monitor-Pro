@@ -6,6 +6,7 @@ import {
   Boxes,
   Cable,
   ChartSpline,
+  Download,
   ListChecks,
   Moon,
   OctagonX,
@@ -19,15 +20,25 @@ import {
   TableProperties,
   Unplug,
   Workflow,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { formatCount } from '@shared/i18n';
-import { BAUD_RATES, DATA_BITS, PARITIES, STOP_BITS, type Parity } from '@shared/core/settings';
+import {
+  BAUD_RATES,
+  DATA_BITS,
+  FLOW_CONTROLS,
+  PARITIES,
+  STOP_BITS,
+  type FlowControl,
+  type Parity,
+} from '@shared/core/settings';
 import logo from '../assets/logo.svg';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore, setTab, TABS, updateSettings, type TabId } from '../state/app';
-import { refreshPorts, toggleConnection } from '../state/serial';
+import { refreshPorts, sendBreak, setControlLine, toggleConnection } from '../state/serial';
+import { latestVersion } from '../state/updates';
 import { openDialog } from '../state/ui';
 import { Button, Input, Select } from './ui';
 
@@ -163,6 +174,19 @@ export function ConnectionBar(): ReactNode {
           disabled={locked}
           style={{ width: 62 }}
         />
+        <label htmlFor="flow" title={t('conn.flowTip')}>
+          {t('conn.flow')}
+        </label>
+        <Select<FlowControl>
+          id="flow"
+          data-testid="flow-select"
+          value={settings.flowControl}
+          options={FLOW_CONTROLS.map((f) => ({ value: f, label: t(`conn.flow.${f}`) }))}
+          onChange={(flowControl) => updateSettings({ flowControl })}
+          disabled={locked}
+          title={t('conn.flowTip')}
+          style={{ width: 104 }}
+        />
       </div>
 
       <div className="conn-group">
@@ -195,7 +219,67 @@ export function ConnectionBar(): ReactNode {
       <span className="status-pill" data-state={connection} data-testid="connection-state">
         {stateLabel}
       </span>
+      <ControlLines />
     </header>
+  );
+}
+
+/** DTR/RTS switches, CTS/DSR/DCD indicators and the break button. */
+function ControlLines(): ReactNode {
+  const t = useT();
+  const settings = useStore(appStore, (s) => s.settings);
+  const connected = useStore(appStore, (s) => s.connection === 'connected');
+  const modem = useStore(appStore, (s) => s.modemLines);
+  const rtsAuto = settings.flowControl === 'rtscts';
+  const output = (line: 'dtr' | 'rts', tip: string, auto = false): ReactNode => {
+    const on = auto || settings[line];
+    return (
+      <button
+        type="button"
+        className="line-switch"
+        aria-pressed={on}
+        data-testid={`line-${line}`}
+        disabled={auto}
+        title={auto ? t('lines.rtsAuto') : tip}
+        onClick={() => void setControlLine(line, !on)}
+      >
+        <i aria-hidden />
+        {line.toUpperCase()}
+      </button>
+    );
+  };
+  const input = (line: 'cts' | 'dsr' | 'dcd', tip: string): ReactNode => (
+    <span
+      className="line-led"
+      data-state={!connected || !modem ? 'unknown' : modem[line] ? 'on' : 'off'}
+      data-testid={`line-${line}`}
+      title={connected && !modem ? t('lines.unknown') : tip}
+    >
+      <i aria-hidden />
+      {line.toUpperCase()}
+    </span>
+  );
+  return (
+    <div className="control-lines" data-testid="control-lines">
+      {output('dtr', t('lines.dtrTip'), rtsAuto)}
+      {output('rts', t('lines.rtsTip'), rtsAuto)}
+      <span className="divider" aria-hidden />
+      {input('cts', t('lines.ctsTip'))}
+      {input('dsr', t('lines.dsrTip'))}
+      {input('dcd', t('lines.dcdTip'))}
+      <span className="divider" aria-hidden />
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={Zap}
+        disabled={!connected || rtsAuto}
+        title={rtsAuto ? t('lines.rtsAuto') : t('lines.breakTip')}
+        onClick={() => void sendBreak()}
+        data-testid="line-break"
+      >
+        {t('lines.break')}
+      </Button>
+    </div>
   );
 }
 
@@ -263,12 +347,25 @@ export function StatusBar(): ReactNode {
   const txRate = useStore(appStore, (s) => s.txRate);
   const info = useStore(appStore, (s) => s.info);
   const simulator = useStore(appStore, (s) => s.settings.simulator);
+  const update = useStore(appStore, (s) => s.update);
+  const latest = update?.newer.length ? latestVersion() : '';
   return (
     <footer className="statusbar">
       <span className="message" data-tone={status.tone} data-testid="status-message">
         {status.text || t('status.ready')}
       </span>
       {simulator && <span className="sim">{t('status.simulator')}</span>}
+      {latest && (
+        <button
+          type="button"
+          className="update-link"
+          data-testid="update-available"
+          onClick={() => openDialog('update')}
+        >
+          <Download size={12} strokeWidth={2.4} aria-hidden />
+          {t('update.statusBar', { version: latest })}
+        </button>
+      )}
       <div className="counters" data-testid="counters">
         <span className="rx">
           RX <b>{formatCount(rxBytes)}</b> B{rxRate > 0 && <i> · {formatRate(rxRate)}</i>}

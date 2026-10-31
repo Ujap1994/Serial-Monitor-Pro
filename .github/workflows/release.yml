@@ -103,6 +103,36 @@ jobs:
             test-results
           retention-days: 7
 
+  snap:
+    name: Snap ${{ matrix.arch }}
+    needs: verify
+    # Build each architecture natively; the legacy Snap template has no arm64 build.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Set up LXD for isolated Snapcraft builds
+        uses: canonical/setup-lxd@v0.1.3
+        with:
+          channel: 5.21/stable
+      - name: Install Snapcraft
+        run: sudo snap install snapcraft --classic --channel=8.x/stable
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --linux snap --${{ matrix.arch }} --publish never
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-snap-${{ matrix.arch }}
+          path: release/*.snap
+          if-no-files-found: error
+
   flatpak:
     name: Flatpak ${{ matrix.arch }}
     needs: verify
@@ -191,7 +221,7 @@ jobs:
           retention-days: 7
 
   macos:
-    name: macOS (Apple Silicon + Intel)
+    name: macOS (Apple Silicon + Intel + Universal)
     needs: verify
     runs-on: macos-latest
     steps:
@@ -212,6 +242,20 @@ jobs:
           CI: 'true'
           SMP_APP_EXECUTABLE: ${{ github.workspace }}/release/mac-arm64/Serial Monitor Pro.app/Contents/MacOS/Serial Monitor Pro
       - run: npx electron-builder --mac dmg zip --x64 --publish never
+      - run: npx electron-builder --mac dmg zip --universal --publish never
+      - name: Verify Universal application and serial binding architectures
+        run: |
+          APP="release/mac-universal/Serial Monitor Pro.app"
+          for ARCH in x86_64 arm64; do
+            lipo "$APP/Contents/MacOS/Serial Monitor Pro" -verify_arch "$ARCH"
+            lipo "$APP/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework" -verify_arch "$ARCH"
+            lipo "$APP/Contents/Resources/app.asar.unpacked/node_modules/@serialport/bindings-cpp/prebuilds/darwin-x64+arm64/@serialport+bindings-cpp.node" -verify_arch "$ARCH"
+          done
+      - name: Test the packaged application (Universal)
+        run: npx playwright test
+        env:
+          CI: 'true'
+          SMP_APP_EXECUTABLE: ${{ github.workspace }}/release/mac-universal/Serial Monitor Pro.app/Contents/MacOS/Serial Monitor Pro
       - uses: actions/upload-artifact@v7
         with:
           name: package-macos
@@ -234,7 +278,7 @@ jobs:
   # publishes.
   publish:
     name: Publish GitHub release
-    needs: [verify, linux, flatpak, windows, macos]
+    needs: [verify, linux, snap, flatpak, windows, macos]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -256,6 +300,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         with:
           tag_name: v${{ needs.verify.outputs.version }}
+          target_commitish: ${{ github.sha }}
           name: Serial Monitor Pro ${{ needs.verify.outputs.version }}
           body_path: release-notes.md
           files: dist/*

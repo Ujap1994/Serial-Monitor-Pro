@@ -3,9 +3,11 @@
 import type { LanguageSetting } from '../i18n';
 import { isNewline, type Newline } from './commands';
 import { CRC_NAMES } from './crc';
+import type { FileSendMode } from './filesend';
 import { isDataFormat, type DataFormat } from './format';
 import type { LengthCounts } from './frames';
 import { TIMESTAMP_FORMATS, type TimestampFormat } from './timestamp';
+import { DEFAULT_TRANSMIT_CRC, type TransmitCrcConfig } from './transmit-crc';
 import type { ExtractMode } from './values';
 
 export const BAUD_RATES = [
@@ -15,10 +17,13 @@ export const BAUD_RATES = [
 export const DATA_BITS = [5, 6, 7, 8] as const;
 export const PARITIES = ['None', 'Even', 'Odd', 'Mark', 'Space'] as const;
 export const STOP_BITS = ['1', '1.5', '2'] as const;
+/** Handshake: none, hardware (RTS/CTS) or software (XON/XOFF). */
+export const FLOW_CONTROLS = ['none', 'rtscts', 'xonxoff'] as const;
 
 export type DataBits = (typeof DATA_BITS)[number];
 export type Parity = (typeof PARITIES)[number];
 export type StopBits = (typeof STOP_BITS)[number];
+export type FlowControl = (typeof FLOW_CONTROLS)[number];
 export type Theme = 'system' | 'light' | 'dark';
 export type RxSplit = 'newline' | 'packet';
 
@@ -31,6 +36,12 @@ export interface FrameConfig {
   crc: string;
   crcBigEndian: boolean;
   fixedLength: number;
+}
+
+export interface FileSendConfig {
+  mode: FileSendMode;
+  blockSize: number;
+  pauseMs: number;
 }
 
 export interface GraphConfig {
@@ -46,6 +57,10 @@ export interface Settings {
   dataBits: DataBits;
   parity: Parity;
   stopBits: StopBits;
+  flowControl: FlowControl;
+  /** State of the DTR and RTS lines after connecting (and while connected). */
+  dtr: boolean;
+  rts: boolean;
   autoReconnect: boolean;
   // Display
   display: DataFormat;
@@ -74,9 +89,15 @@ export interface Settings {
   language: LanguageSetting;
   simulator: boolean;
   quickPanel: boolean;
+  /** Look for a new release on GitHub at startup. */
+  updateCheck: boolean;
+  /** Release the user chose to skip – no automatic notice for it any more. */
+  updateSkipped: string;
   // Tools
   frame: FrameConfig;
   graph: GraphConfig;
+  fileSend: FileSendConfig;
+  transmitCrc: TransmitCrcConfig;
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
@@ -85,6 +106,9 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
   dataBits: 8,
   parity: 'None',
   stopBits: '1',
+  flowControl: 'none',
+  dtr: true,
+  rts: true,
   autoReconnect: false,
   display: 'ASCII',
   timestamp: true,
@@ -110,6 +134,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
   language: 'auto',
   simulator: false,
   quickPanel: true,
+  updateCheck: true,
+  updateSkipped: '',
   frame: {
     header: '',
     footer: '',
@@ -120,6 +146,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
     fixedLength: 0,
   },
   graph: { mode: 'auto', separator: ',', points: 500 },
+  fileSend: { mode: 'blocks', blockSize: 64, pauseMs: 10 },
+  transmitCrc: { ...DEFAULT_TRANSMIT_CRC },
 });
 
 type Dict = Record<string, unknown>;
@@ -142,12 +170,17 @@ export function normalizeSettings(raw: unknown): Settings {
   const D = DEFAULT_SETTINGS;
   const f = asDict(s.frame);
   const g = asDict(s.graph);
+  const fs = asDict(s.fileSend);
+  const c = asDict(s.transmitCrc);
   return {
     port: str(s.port, D.port),
     baud: int(s.baud, D.baud, 50, 20_000_000),
     dataBits: oneOf(DATA_BITS, Number(s.dataBits), D.dataBits),
     parity: oneOf(PARITIES, s.parity, D.parity),
     stopBits: oneOf(STOP_BITS, String(s.stopBits), D.stopBits),
+    flowControl: oneOf(FLOW_CONTROLS, s.flowControl, D.flowControl),
+    dtr: bool(s.dtr, D.dtr),
+    rts: bool(s.rts, D.rts),
     autoReconnect: bool(s.autoReconnect, D.autoReconnect),
     display: isDataFormat(s.display) ? s.display : D.display,
     timestamp: bool(s.timestamp, D.timestamp),
@@ -173,6 +206,8 @@ export function normalizeSettings(raw: unknown): Settings {
     language: oneOf(['auto', 'de', 'en'] as const, s.language, D.language),
     simulator: bool(s.simulator, D.simulator),
     quickPanel: bool(s.quickPanel, D.quickPanel),
+    updateCheck: bool(s.updateCheck, D.updateCheck),
+    updateSkipped: str(s.updateSkipped, D.updateSkipped),
     frame: {
       header: str(f.header, D.frame.header),
       footer: str(f.footer, D.frame.footer),
@@ -190,6 +225,25 @@ export function normalizeSettings(raw: unknown): Settings {
       mode: oneOf(['auto', 'labeled', 'separated'] as const, g.mode, D.graph.mode),
       separator: oneOf([',', ';', ' ', '\t'] as const, g.separator, D.graph.separator),
       points: int(g.points, D.graph.points, 50, 5000),
+    },
+    fileSend: {
+      mode: oneOf(['blocks', 'lines'] as const, fs.mode, D.fileSend.mode),
+      blockSize: int(fs.blockSize, D.fileSend.blockSize, 1, 4096),
+      pauseMs: int(fs.pauseMs, D.fileSend.pauseMs, 0, 60_000),
+    },
+    transmitCrc: {
+      enabled: bool(c.enabled, D.transmitCrc.enabled),
+      algorithm: oneOf(CRC_NAMES, c.algorithm, D.transmitCrc.algorithm),
+      bigEndian: bool(c.bigEndian, D.transmitCrc.bigEndian),
+      // Retain finite out-of-range values: transmission must reject them, not move the CRC.
+      position:
+        typeof c.position === 'number' && Number.isFinite(c.position)
+          ? c.position
+          : D.transmitCrc.position,
+      header: str(c.header, ''),
+      footer: str(c.footer, ''),
+      includeHeader: bool(c.includeHeader, true),
+      includeFooter: bool(c.includeFooter, true),
     },
   };
 }

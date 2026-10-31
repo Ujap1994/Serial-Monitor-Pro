@@ -1,32 +1,42 @@
 // Main process: window, menu, serial ports, storage.
 
 import { createWriteStream, readFileSync, type WriteStream } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile, stat, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { finished } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron';
-import { resolveLanguage, setLanguage, type Language } from '@shared/i18n';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, shell } from 'electron';
+import { resolveLanguage, setLanguage, t, type Language } from '@shared/i18n';
 import {
   IPC,
   type AppInfo,
+  type BinaryFile,
+  type ControlLines,
   type FileFilter,
   type MenuAction,
   type OpenOptions,
+  type ReleaseInfo,
   type StoreName,
+  type ValueResult,
 } from '@shared/ipc';
 import type { Theme } from '@shared/core/settings';
+import { newerReleases, parseReleases } from '@shared/core/updates';
 import icon from '../../resources/icon.png?asset';
 import { APP_NAME, REPOSITORY_URL } from './constants';
 import { buildMenu } from './menu';
 import { listPorts, SerialManager } from './serial';
 import { simulatedPorts } from './simulator';
 import { Storage } from './storage';
+import { fetchNewerReleases } from './updates';
 import { loadWindowState, trackWindowState } from './window-state';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 
 // Isolated profile for automated tests (keeps the developer's data untouched).
 if (process.env.SMP_USER_DATA_DIR) app.setPath('userData', process.env.SMP_USER_DATA_DIR);
+// Electron keys its process singleton by userData. Set the profile first so
+// parallel tests remain independent while each individual profile stays locked.
+const primaryInstance = app.requestSingleInstanceLock();
 
 const simulatorForced = process.argv.includes('--simulator') || process.env.SMP_SIMULATOR === '1';
 // Screenshots and demos must not show the real devices of whoever creates them.
@@ -36,6 +46,11 @@ const STORES: StoreName[] = ['settings', 'commands', 'automation'];
 let mainWindow: BrowserWindow | null = null;
 let language: Language = 'en';
 let logStream: WriteStream | null = null;
+let quitting = false;
+let shutdownFinished = false;
+let closeRequested = false;
+const pendingSaves = new Set<Promise<boolean>>();
+const saveQueues = new Map<StoreName, Promise<boolean>>();
 
 const storage = new Storage(app.getPath('userData'));
 const serial = new SerialManager((event) => {
@@ -70,6 +85,7 @@ function backgroundFor(theme: Theme): string {
 }
 
 function createWindow(): void {
+  if (quitting) return;
   const state = loadWindowState(app.getPath('userData'));
   const win = new BrowserWindow({
     ...(state.centered ? { width: state.bounds.width, height: state.bounds.height } : state.bounds),
@@ -107,9 +123,12 @@ function createWindow(): void {
     if (url !== win.webContents.getURL()) event.preventDefault();
   });
 
+  win.on('close', (event) => {
+    event.preventDefault();
+    requestWindowClose();
+  });
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
-    void serial.closeAll();
   });
 
   const devUrl = process.env.ELECTRON_RENDERER_URL;
@@ -118,26 +137,52 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.on(IPC.appCloseReady, (event) => {
+    if (closeRequested && mainWindow?.webContents === event.sender) mainWindow.destroy();
+  });
   ipcMain.handle(IPC.serialList, (_e, includeSimulated: boolean) =>
     simulatedOnly ? simulatedPorts() : listPorts(Boolean(includeSimulated) || simulatorForced),
   );
   ipcMain.handle(IPC.serialOpen, (_e, id: string, options: OpenOptions) =>
-    serial.open(String(id), options),
+    quitting
+      ? { ok: false, error: 'Application is closing', code: 'unknown' }
+      : serial.open(String(id), options),
   );
   ipcMain.handle(IPC.serialClose, (_e, id: string) => serial.close(String(id)));
   ipcMain.handle(IPC.serialWrite, (_e, id: string, data: Uint8Array) =>
     serial.write(String(id), new Uint8Array(data)),
   );
   ipcMain.handle(IPC.serialSample, (_e, path: string, baud: number, ms: number) =>
-    serial.sample(String(path), Number(baud), Math.min(5000, Math.max(50, Number(ms)))),
+    quitting
+      ? { ok: false, error: 'Application is closing', code: 'unknown' }
+      : serial.sample(String(path), Number(baud), Math.min(5000, Math.max(50, Number(ms) || 50))),
+  );
+  ipcMain.handle(IPC.serialSetLines, (_e, id: string, lines: ControlLines) =>
+    serial.setLines(String(id), { dtr: Boolean(lines?.dtr), rts: Boolean(lines?.rts) }),
+  );
+  ipcMain.handle(IPC.serialGetLines, (_e, id: string) => serial.getLines(String(id)));
+  ipcMain.handle(IPC.serialBreak, (_e, id: string, ms: number) =>
+    serial.sendBreak(String(id), Math.min(5000, Math.max(10, Number(ms) || 250))),
   );
 
   ipcMain.handle(IPC.storeLoad, (_e, name: StoreName) =>
     STORES.includes(name) ? storage.load(name) : null,
   );
-  ipcMain.handle(IPC.storeSave, (_e, name: StoreName, data: unknown) =>
-    STORES.includes(name) ? storage.save(name, data) : false,
-  );
+  ipcMain.handle(IPC.storeSave, async (_e, name: StoreName, data: unknown) => {
+    if (!STORES.includes(name)) return false;
+    // Debounced saves and the final flush must not race on the same temp file.
+    const saved = (saveQueues.get(name) ?? Promise.resolve(true)).then(() =>
+      storage.save(name, data),
+    );
+    saveQueues.set(name, saved);
+    pendingSaves.add(saved);
+    try {
+      return await saved;
+    } finally {
+      pendingSaves.delete(saved);
+      if (saveQueues.get(name) === saved) saveQueues.delete(name);
+    }
+  });
 
   ipcMain.handle(
     IPC.fileSave,
@@ -160,29 +205,50 @@ function registerIpc(): void {
     return { path, content: await readFile(path, 'utf8') };
   });
 
+  ipcMain.handle(
+    IPC.fileOpenBinary,
+    async (_e, maxBytes: number): Promise<ValueResult<BinaryFile> | null> => {
+      if (!mainWindow) return null;
+      const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'] });
+      const path = result.filePaths[0];
+      if (result.canceled || !path) return null;
+      try {
+        const { size } = await stat(path);
+        if (size > maxBytes) {
+          return {
+            ok: false,
+            error: t('sendfile.tooLarge', { size, max: maxBytes }),
+            code: 'unknown',
+          };
+        }
+        return { ok: true, value: { path, name: basename(path), data: await readFile(path) } };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          code: 'unknown',
+        };
+      }
+    },
+  );
+
   ipcMain.handle(IPC.logStart, async (_e, defaultName: string) => {
-    if (!mainWindow) return null;
+    if (!mainWindow || quitting) return null;
     const result = await dialog.showSaveDialog(mainWindow, {
       defaultPath: join(app.getPath('documents'), defaultName),
       filters: [{ name: 'Text', extensions: ['txt', 'log'] }],
     });
-    if (result.canceled || !result.filePath) return null;
-    logStream?.end();
+    if (result.canceled || !result.filePath || quitting) return null;
+    await finishLog();
+    if (quitting) return null;
     logStream = createWriteStream(result.filePath, { flags: 'a', encoding: 'utf8' });
+    logStream.on('error', (error) => console.warn('[log] write failed:', error));
     return result.filePath;
   });
   ipcMain.on(IPC.logWrite, (_e, text: string) => {
     logStream?.write(String(text));
   });
-  ipcMain.handle(
-    IPC.logStop,
-    () =>
-      new Promise<void>((resolve) => {
-        if (!logStream) return resolve();
-        logStream.end(() => resolve());
-        logStream = null;
-      }),
-  );
+  ipcMain.handle(IPC.logStop, () => finishLog());
 
   ipcMain.handle(IPC.appInfo, (): AppInfo => {
     const ud = app.getPath('userData');
@@ -204,6 +270,7 @@ function registerIpc(): void {
       },
       serialGroup: serialGroup(),
       repository: REPOSITORY_URL,
+      updateCheck: process.env.SMP_NO_UPDATE_CHECK !== '1',
     };
   });
   ipcMain.on(IPC.appTheme, (_e, theme: Theme) => {
@@ -222,28 +289,94 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appExternal, async (_e, url: string) => {
     if (typeof url === 'string' && url.startsWith('https://')) await shell.openExternal(url);
   });
+  ipcMain.handle(IPC.appReleases, async (): Promise<ValueResult<ReleaseInfo[]>> => {
+    try {
+      // A local file stands in for GitHub in tests and screenshots.
+      const feed = process.env.SMP_UPDATE_FEED;
+      const releases = feed
+        ? newerReleases(
+            parseReleases(JSON.parse(await readFile(feed, 'utf8')) as unknown),
+            app.getVersion(),
+          )
+        : await fetchNewerReleases((url, options) => net.fetch(url, options), app.getVersion());
+      return { ok: true, value: releases };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        code: 'unknown',
+      };
+    }
+  });
 }
 
 app.setAppUserModelId('io.github.ujap1994.SerialMonitorPro');
 
-void app.whenReady().then(() => {
-  language = resolveLanguage('auto', app.getLocale());
-  setLanguage(language);
-  registerIpc();
-  applyMenu();
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+if (!primaryInstance) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow || quitting) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   });
-});
+  void app.whenReady().then(() => {
+    if (quitting) return;
+    language = resolveLanguage('auto', app.getLocale());
+    setLanguage(language);
+    registerIpc();
+    applyMenu();
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  shutdown();
 });
 
-app.on('before-quit', () => {
-  logStream?.end();
+async function finishLog(): Promise<void> {
+  const stream = logStream;
   logStream = null;
-  void serial.closeAll();
+  if (!stream) return;
+  const closed = finished(stream, { cleanup: true });
+  stream.end();
+  await closed;
+}
+
+let shutdownStarted = false;
+function requestWindowClose(): void {
+  if (!mainWindow) return shutdown();
+  if (closeRequested) return;
+  closeRequested = true;
+  quitting = true;
+  if (mainWindow.webContents.isLoadingMainFrame() || mainWindow.webContents.isCrashed()) {
+    mainWindow.destroy();
+    return;
+  }
+  mainWindow.webContents.send(IPC.appCloseRequested);
+}
+
+function shutdown(): void {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  quitting = true;
+  void Promise.allSettled([serial.closeAll(), finishLog(), ...pendingSaves]).then((results) => {
+    for (const result of results) {
+      if (result.status === 'rejected') console.warn('[shutdown] cleanup failed:', result.reason);
+    }
+    shutdownFinished = true;
+    app.quit();
+  });
+}
+
+app.on('before-quit', (event) => {
+  if (!primaryInstance || shutdownFinished) return;
+  event.preventDefault();
+  quitting = true;
+  requestWindowClose();
 });

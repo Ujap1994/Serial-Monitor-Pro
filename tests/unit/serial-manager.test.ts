@@ -133,6 +133,51 @@ describe('SerialManager with simulated devices', () => {
   });
 });
 
+describe('control lines of the simulated devices', () => {
+  it('enforces the same hardware flow-control restrictions as the real driver', async () => {
+    const { manager } = collect();
+    active = manager;
+    expect(
+      await manager.open('main', {
+        ...options('sim:loopback'),
+        flowControl: 'rtscts',
+        lines: { dtr: false, rts: true },
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await manager.open('main', { ...options('sim:loopback'), flowControl: 'rtscts' }),
+    ).toEqual({ ok: true });
+    expect(await manager.setLines('main', { dtr: false, rts: true })).toMatchObject({ ok: false });
+    expect(await manager.sendBreak('main', 10)).toMatchObject({ ok: false });
+  });
+
+  it('wires the loopback like a loopback plug: RTS → CTS, DTR → DSR and DCD', async () => {
+    const { manager } = collect();
+    active = manager;
+    await manager.open('main', { ...options('sim:loopback'), lines: { dtr: true, rts: false } });
+    expect(await manager.getLines('main')).toEqual({
+      ok: true,
+      value: { cts: false, dsr: true, dcd: true },
+    });
+    await manager.setLines('main', { dtr: false, rts: true });
+    expect(await manager.getLines('main')).toEqual({
+      ok: true,
+      value: { cts: true, dsr: false, dcd: false },
+    });
+    expect(await manager.sendBreak('main', 10)).toEqual({ ok: true });
+  });
+
+  it('reports the other devices as ready', async () => {
+    const { manager } = collect();
+    active = manager;
+    await manager.open('main', options('sim:sensor', 9600));
+    expect(await manager.getLines('main')).toEqual({
+      ok: true,
+      value: { cts: true, dsr: true, dcd: true },
+    });
+  });
+});
+
 describe('classifyError', () => {
   it.each([
     ['Error: Permission denied, cannot open /dev/ttyUSB0', 'permission'],
