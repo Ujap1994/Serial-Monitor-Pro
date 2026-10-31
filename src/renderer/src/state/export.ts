@@ -29,8 +29,8 @@ export async function exportText(): Promise<void> {
   }
 }
 
-export async function exportCsv(): Promise<void> {
-  if (!(await ensureContent())) return;
+/** The Monitor content as CSV (also used by the stop condition's automatic save). */
+export function monitorCsv(): string {
   const header = [
     t('export.col.time'),
     t('export.col.direction'),
@@ -38,11 +38,14 @@ export async function exportCsv(): Promise<void> {
     'HEX',
     t('export.col.text'),
   ];
-  const path = await window.smp.files.saveText(
-    `serial_${fileStamp()}.csv`,
-    entriesToCsv(monitor.all(), header),
-    [{ name: 'CSV', extensions: ['csv'] }],
-  );
+  return entriesToCsv(monitor.all(), header);
+}
+
+export async function exportCsv(): Promise<void> {
+  if (!(await ensureContent())) return;
+  const path = await window.smp.files.saveText(`serial_${fileStamp()}.csv`, monitorCsv(), [
+    { name: 'CSV', extensions: ['csv'] },
+  ]);
   if (path) {
     setStatus(t('export.saved', { path }), 'ok');
     toast(t('export.saved', { path }), 'ok');

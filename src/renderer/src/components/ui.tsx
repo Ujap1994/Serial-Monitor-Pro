@@ -269,3 +269,34 @@ export function Empty({
     </div>
   );
 }
+
+/** Switches between the sections of a page. */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  testId,
+}: {
+  value: T;
+  options: readonly { value: T; label: ReactNode; icon?: LucideIcon }[];
+  onChange: (value: T) => void;
+  testId?: string;
+}): ReactNode {
+  return (
+    <div className="segmented" role="tablist">
+      {options.map(({ value: v, label, icon: Icon }) => (
+        <button
+          key={v}
+          type="button"
+          role="tab"
+          aria-selected={v === value}
+          onClick={() => onChange(v)}
+          data-testid={testId ? `${testId}-${v}` : undefined}
+        >
+          {Icon && <Icon size={14} strokeWidth={2.2} aria-hidden />}
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}

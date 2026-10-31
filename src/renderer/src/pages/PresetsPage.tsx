@@ -5,26 +5,30 @@ import {
   Copy,
   FileDown,
   FileUp,
+  Info,
   ListChecks,
   Pencil,
   Plus,
+  Repeat,
   SendHorizontal,
+  Square,
   Trash2,
 } from 'lucide-react';
-import { commandPreview, type Command } from '@shared/core/commands';
+import { commandBytes, commandPreview, type Command } from '@shared/core/commands';
 import { Button, Card, Empty, PageHeader } from '../components/ui';
 import { CommandEditor } from '../dialogs/CommandEditor';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore, setCommands } from '../state/app';
 import { exportCommands, importCommands } from '../state/commands';
-import { sendCommand } from '../state/serial';
+import { sendCommand, startPeriodic, stopPeriodic } from '../state/serial';
 import { alertDialog, confirmDialog } from '../state/ui';
 
 export function PresetsPage(): ReactNode {
   const t = useT();
   const commands = useStore(appStore, (s) => s.commands);
   const crc = useStore(appStore, (s) => s.settings.transmitCrc);
+  const periodic = useStore(appStore, (s) => s.periodic);
   const [selected, setSelected] = useState(0);
   const [editing, setEditing] = useState<{ index: number | null } | null>(null);
   const index = Math.min(selected, commands.length - 1);
@@ -133,6 +137,7 @@ export function PresetsPage(): ReactNode {
                 key={i}
                 role="option"
                 className="list-item"
+                title={c.description || undefined}
                 aria-selected={i === index}
                 onClick={() => setSelected(i)}
                 onDoubleClick={() => void sendCommand(c)}
@@ -146,7 +151,7 @@ export function PresetsPage(): ReactNode {
           </div>
         </Card>
 
-        <Card title={t('presets.details')} fill>
+        <Card title={t('presets.details')} icon={Info} fill>
           {current ? (
             <>
               <dl className="detail selectable">
@@ -168,6 +173,16 @@ export function PresetsPage(): ReactNode {
                 </dd>
                 <dt>{t('presets.inTable')}</dt>
                 <dd>{current.enabled ? t('presets.active') : t('presets.skipped')}</dd>
+                <dt>{t('command.periodic')}</dt>
+                <dd>{current.periodicMs} ms</dd>
+                {current.description && (
+                  <>
+                    <dt>{t('command.description')}</dt>
+                    <dd className="pre-wrap" data-testid="preset-description">
+                      {current.description}
+                    </dd>
+                  </>
+                )}
               </dl>
               <div>
                 <div className="section-title">{t('command.willSend')}</div>
@@ -176,14 +191,43 @@ export function PresetsPage(): ReactNode {
                 </div>
               </div>
               <span className="grow" />
-              <Button
-                variant="success"
-                icon={SendHorizontal}
-                onClick={() => void sendCommand(current)}
-                data-testid="preset-send"
-              >
-                {t('presets.sendSelected')}
-              </Button>
+              <div className="row nowrap">
+                <Button
+                  variant="success"
+                  icon={SendHorizontal}
+                  className="grow"
+                  onClick={() => void sendCommand(current)}
+                  data-testid="preset-send"
+                >
+                  {t('presets.sendSelected')}
+                </Button>
+                <Button
+                  variant={periodic ? 'danger' : 'default'}
+                  icon={periodic ? Square : Repeat}
+                  data-testid="preset-periodic"
+                  title={periodic ? t('periodic.running', { name: periodic }) : undefined}
+                  onClick={() => {
+                    if (periodic) {
+                      stopPeriodic();
+                      return;
+                    }
+                    const cmd = current;
+                    void startPeriodic({
+                      label: cmd.name,
+                      next: () => ({
+                        data: commandBytes(cmd, appStore.get().settings.transmitCrc),
+                        fmt: cmd.fmt,
+                        label: cmd.name,
+                      }),
+                      intervalMs: () => cmd.periodicMs,
+                    });
+                  }}
+                >
+                  {periodic
+                    ? t('periodic.stop')
+                    : t('presets.periodic', { ms: current.periodicMs })}
+                </Button>
+              </div>
             </>
           ) : (
             <Empty icon={SendHorizontal}>{t('presets.noneSelected')}</Empty>

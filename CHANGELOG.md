@@ -6,14 +6,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-## [1.1.0] – 2026-10-31
+## [1.1.0] – 2026-11-01
+
+This release restores the transmit and automation functions of the former Python
+(CustomTkinter) version that were missing after the move to TypeScript.
 
 ### Added
 
-- **CRC transmission**: persistent little-/big-endian selection, signed insertion position,
-  automatic CRC for manual Monitor input, independent header/footer coverage and exact HEX previews.
-  Position `0` appends, `1` inserts before the second byte, and `-1` before the penultimate byte.
-  Invalid positions and mismatching framing block transmission. Separate line endings are added last.
+- **CRC when sending, as in the Python version**: _Add CRC_ in the Monitor, algorithm and
+  little-/big-endian byte order, a signed position counted within the data like Python slicing
+  (`0` appends, `1` makes the CRC the 2nd byte, `-1` puts it before the last byte), and
+  _Include header/footer in CRC_. Impossible positions block sending instead of moving the CRC.
+- **Header and footer in the Monitor**: added automatically around every input, written in the send
+  format; a coloured preview shows header, data, CRC, footer and line end before sending.
+- **Periodic sending** of the Monitor input and of single presets, with its own interval per preset.
+- **Presets**: _Append CRC_ per command (Python `add_crc`), description and periodic interval;
+  Python preset exports are read with these fields.
+- **CRC tools**: two-part layout as in the Python version – transmit settings with a live transmit
+  example and the algorithm parameters, and an independent calculator (format, algorithm, byte order).
+- **Stop condition actions**: log only, pause the Monitor display, or pause and save the Monitor
+  content as CSV without a dialog (`Documents/Serial Monitor Pro`).
+- **Automation**: triggers that answer received text, HEX or regular-expression patterns (with a
+  cooldown against echo loops), a scheduler for timed sends, and macro recording of manual sends into
+  sequence steps. Triggers and scheduler always start switched off.
+- **Multi-port**: bridge mode (one or both directions) and RX/TX byte counters per slot.
+- **Live graph**: statistics per curve (count, min, max, mean, standard deviation, median, range) and
+  CSV export.
+- **Protocol decoder**: total/valid/invalid counters with success rate, _Show invalid packets_ and
+  CSV export of all decoded packets.
+- **Legacy import**: CRC, header/footer and periodic settings of the CustomTkinter version
+  (`serial_monitor_settings.json`) are taken over on the first start.
 - **Flow control and signals**: none, RTS/CTS or XON/XOFF; manual DTR/RTS with supported modes;
   CTS/DSR/DCD indicators and a 250 ms BREAK action. RTS/CTS reserves signal control for the driver.
 - **Send file**: binary blocks or preserved text lines, configurable block size and pause, progress,
@@ -21,8 +43,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Update notice**: startup/manual checks, release links and cumulative changes from every newer
   stable release, including paginated feeds; per-version skip and an automatic-check setting.
 - **Distribution**: macOS Universal DMG/ZIP and native x64/arm64 Snap builds alongside existing packages.
-- **Collaboration**: shared Codex/Claude work ledger and repository entry-point instructions.
-- Expanded English guide with anonymized screenshots, code audit/CLI assessment and a long-run checklist.
+- Shared Codex/Claude work ledger and repository entry-point instructions.
+
+### Changed
+
+- **Consistent interface**: every tool shows its output in a titled card with _Clear output_ in the
+  card header; all cards carry an icon; form fields align on one line even when some have hints.
+- The tab bar scrolls on narrow windows while theme and settings stay visible; the active tab is
+  scrolled into view.
+- The Monitor's display options keep filter and _Clear_ together; the send area is grouped in two rows.
+- Python defaults for CRC sending: CRC-16/MODBUS, big-endian, appended, header/footer not in the CRC.
 
 ### Fixed
 
@@ -39,10 +69,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Tests
 
-- Known-vector CRC packet tests cover byte order, signed offsets, all input formats, independent
-  framing coverage and invalid input. Electron tests verify actual simulator sends and saved settings.
-- Driver-mock tests exercise line failures and port lifecycle races. Electron tests cover file bytes,
-  cancellation/reconnect, cumulative update notes, single-instance behaviour and immediate-close persistence.
+- CRC vectors computed independently in Python (zlib and a bitwise Modbus CRC with Python slicing):
+  byte orders, signed positions, header/footer coverage, all input formats, UTF-8 and invalid input.
+- Unit tests for triggers (packet borders, regular expressions, cooldown), scheduler timing, macro
+  recording, graph statistics/CSV, decoder validity, settings and legacy import.
+- Electron end-to-end tests with the simulators for CRC/header/footer sending, persistence, preset CRC,
+  periodic sending, stop actions, triggers, scheduler, macros, bridge, decoder and graph export.
 - No physical device was opened during this change; hardware/long-run acceptance remains a separate step.
 
 ## [1.0.2] – 2026-10-18

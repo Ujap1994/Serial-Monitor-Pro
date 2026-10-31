@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Boxes, Eraser, Scissors } from 'lucide-react';
+import { Boxes, Eraser, Scissors, ScrollText } from 'lucide-react';
 import { CRC_NAMES } from '@shared/core/crc';
 import { parseSendData } from '@shared/core/format';
 import {
@@ -239,8 +239,17 @@ export function FrameParserPage(): ReactNode {
           >
             {t('frames.exampleHeaderButton')}
           </Button>
+        </div>
+      </Card>
+
+      <Card
+        title={t('frames.output')}
+        icon={ScrollText}
+        fill
+        actions={
           <Button
             size="sm"
+            variant="ghost"
             icon={Eraser}
             onClick={() => {
               log.current?.clear();
@@ -249,30 +258,30 @@ export function FrameParserPage(): ReactNode {
           >
             {t('common.clearOutput')}
           </Button>
+        }
+      >
+        <div className="row nowrap">
+          <Input
+            mono
+            className="grow"
+            value={test}
+            placeholder={t('frames.testPlaceholder')}
+            onChange={(e) => setTest(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && parseTest()}
+            data-testid="frame-test-input"
+          />
+          <Button
+            variant="primary"
+            icon={Scissors}
+            onClick={parseTest}
+            data-testid="frame-test-parse"
+          >
+            {t('frames.parse')}
+          </Button>
         </div>
+
+        <TextLog ref={log} emptyIcon={Boxes} empty={t('frames.empty')} testId="frame-output" />
       </Card>
-
-      <div className="row nowrap">
-        <Input
-          mono
-          className="grow"
-          value={test}
-          placeholder={t('frames.testPlaceholder')}
-          onChange={(e) => setTest(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && parseTest()}
-          data-testid="frame-test-input"
-        />
-        <Button
-          variant="primary"
-          icon={Scissors}
-          onClick={parseTest}
-          data-testid="frame-test-parse"
-        >
-          {t('frames.parse')}
-        </Button>
-      </div>
-
-      <TextLog ref={log} emptyIcon={Boxes} empty={t('frames.empty')} testId="frame-output" />
     </>
   );
 }

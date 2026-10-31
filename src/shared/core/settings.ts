@@ -1,6 +1,13 @@
 // Persistent user settings with defaults and validation.
 
 import type { LanguageSetting } from '../i18n';
+import {
+  normalizeList,
+  normalizeSchedule,
+  normalizeTrigger,
+  type Schedule,
+  type Trigger,
+} from './automation';
 import { isNewline, type Newline } from './newline';
 import { CRC_NAMES } from './crc';
 import type { FileSendMode } from './filesend';
@@ -104,6 +111,9 @@ export interface Settings {
   transmitCrc: TransmitCrcConfig;
   /** Interval of periodic sending in the Monitor. */
   periodicMs: number;
+  /** Automation: responses to received patterns and timed sends. */
+  triggers: Trigger[];
+  schedules: Schedule[];
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
@@ -155,6 +165,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
   fileSend: { mode: 'blocks', blockSize: 64, pauseMs: 10 },
   transmitCrc: { ...DEFAULT_TRANSMIT_CRC },
   periodicMs: 1000,
+  triggers: [],
+  schedules: [],
 });
 
 type Dict = Record<string, unknown>;
@@ -255,6 +267,8 @@ export function normalizeSettings(raw: unknown): Settings {
       includeFooter: bool(c.includeFooter, D.transmitCrc.includeFooter),
     },
     periodicMs: int(s.periodicMs, D.periodicMs, PERIODIC_MIN_MS, PERIODIC_MAX_MS),
+    triggers: normalizeList(s.triggers, normalizeTrigger),
+    schedules: normalizeList(s.schedules, normalizeSchedule),
   };
 }
 

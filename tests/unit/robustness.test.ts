@@ -230,6 +230,7 @@ describe('stop on pattern with random packet borders', () => {
         pattern: formatBytes(needle, 'HEX'),
         patternFmt: 'HEX',
         limit: 0,
+        action: 'log',
         disconnect: false,
       };
       const state = newStopState(0);

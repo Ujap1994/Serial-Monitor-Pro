@@ -2,24 +2,42 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowDown,
   ArrowUp,
+  CalendarClock,
+  Circle,
   Eraser,
   Pencil,
   Play,
   Plus,
+  ScrollText,
   Square,
   Trash2,
   Workflow,
+  Zap,
 } from 'lucide-react';
+import type { Schedule, Trigger } from '@shared/core/automation';
+import { newCommand } from '@shared/core/commands';
 import { parseSendData } from '@shared/core/format';
 import { describeStep, ResponseWatcher, type Step } from '@shared/core/steps';
 import { formatTimestamp } from '@shared/core/timestamp';
 import { TextLog, type TextLogHandle } from '../components/LogView';
-import { Button, Card, Check, Empty, PageHeader } from '../components/ui';
+import { Button, Card, Check, Empty, PageHeader, Segmented } from '../components/ui';
+import { ScheduleEditor, TriggerEditor } from '../dialogs/AutomationEditors';
 import { StepEditor } from '../dialogs/StepEditor';
 import { useT } from '../lib/i18n';
 import { useLatest } from '../lib/hooks';
 import { useStore } from '../lib/store';
-import { appStore, setBusy, setSteps } from '../state/app';
+import { appStore, setSteps } from '../state/app';
+import {
+  automationLog,
+  automationStore,
+  setSchedulerOn,
+  setSchedules,
+  setSequenceRunning,
+  setTriggers,
+  setTriggersOn,
+  startRecording,
+  stopRecording,
+} from '../state/automation';
 import { isConnected, rxBus, sendCommand } from '../state/serial';
 import { alertDialog } from '../state/ui';
 
@@ -40,6 +58,11 @@ export function AutomationPage(): ReactNode {
   const [running, setRunning] = useState(false);
   const [current, setCurrent] = useState(-1);
   const [status, setStatus] = useState(t('common.ready'));
+  const [section, setSection] = useState<'sequence' | 'triggers' | 'schedules'>('sequence');
+  const recording = useStore(automationStore, (a) => a.recording);
+  const recorded = useStore(automationStore, (a) => a.recorded);
+  const triggersOn = useStore(automationStore, (a) => a.triggersOn);
+  const schedulerOn = useStore(automationStore, (a) => a.schedulerOn);
   const log = useRef<TextLogHandle>(null);
   const run = useRef<Run>({
     active: false,
@@ -63,7 +86,7 @@ export function AutomationPage(): ReactNode {
     setRunning(false);
     setCurrent(-1);
     setStatus(reason);
-    setBusy('automation', false);
+    setSequenceRunning(false);
     write(`── ${reason} ──`, kind);
   };
 
@@ -101,15 +124,13 @@ export function AutomationPage(): ReactNode {
       case 'send': {
         r.watcher.sent();
         const ok = await sendCommand(
-          {
+          newCommand({
             name: t('automation.stepName', { n: r.index + 1 }),
             data: step.data,
             fmt: step.fmt,
             newline: step.newline,
             delayMs: 0,
-            enabled: true,
-            addCrc: false,
-          },
+          }),
           true,
         );
         if (!r.active) return;
@@ -155,6 +176,8 @@ export function AutomationPage(): ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => automationLog.on(({ text, kind }) => log.current?.append(text, kind)), []);
+
   useEffect(() => {
     if (!connected && run.current.active) stop(t('automation.stopped.disconnected'), 'err');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,8 +200,9 @@ export function AutomationPage(): ReactNode {
       return;
     }
     run.current = { active: true, index: 0, timer: null, watcher: new ResponseWatcher() };
+    if (automationStore.get().recording) stopRecording();
     setRunning(true);
-    setBusy('automation', true);
+    setSequenceRunning(true);
     write(`── ${t('automation.started')} ──`, 'ok');
     void advance();
   };
@@ -194,95 +218,140 @@ export function AutomationPage(): ReactNode {
 
   return (
     <>
-      <PageHeader title={t('automation.title')} description={t('automation.description')} />
+      <PageHeader title={t('automation.title')} description={t('automation.description')}>
+        <Segmented
+          value={section}
+          onChange={setSection}
+          testId="automation-section"
+          options={[
+            { value: 'sequence', label: t('automation.section.sequence'), icon: Workflow },
+            {
+              value: 'triggers',
+              label: (
+                <>
+                  {t('automation.section.triggers')}
+                  {triggersOn && <span className="tab-dot" />}
+                </>
+              ),
+              icon: Zap,
+            },
+            {
+              value: 'schedules',
+              label: (
+                <>
+                  {t('automation.section.schedules')}
+                  {schedulerOn && <span className="tab-dot" />}
+                </>
+              ),
+              icon: CalendarClock,
+            },
+          ]}
+        />
+      </PageHeader>
       <div className="split">
-        <Card title={t('automation.steps', { count: steps.length })} icon={Workflow} fill>
-          <div className="row">
-            <Button
-              variant="primary"
-              size="sm"
-              icon={Plus}
-              disabled={running}
-              onClick={() => setEditing({ index: null })}
-              data-testid="step-new"
-            >
-              {t('common.new')}
-            </Button>
-            <Button
-              size="sm"
-              icon={Pencil}
-              disabled={running || index < 0}
-              onClick={() => setEditing({ index })}
-            >
-              {t('common.edit')}
-            </Button>
-            <Button
-              size="sm"
-              icon={Trash2}
-              disabled={running || index < 0}
-              onClick={() => setSteps(steps.filter((_, i) => i !== index))}
-            >
-              {t('common.delete')}
-            </Button>
-            <span className="spacer" />
-            <Button
-              size="sm"
-              iconOnly
-              icon={ArrowUp}
-              disabled={running}
-              onClick={() => move(-1)}
-              title={t('common.moveUp')}
-            >
-              {t('common.moveUp')}
-            </Button>
-            <Button
-              size="sm"
-              iconOnly
-              icon={ArrowDown}
-              disabled={running}
-              onClick={() => move(1)}
-              title={t('common.moveDown')}
-            >
-              {t('common.moveDown')}
-            </Button>
-          </div>
-          <div className="list" role="listbox" data-testid="step-list">
-            {steps.length === 0 && <Empty icon={Workflow}>{t('automation.empty')}</Empty>}
-            {steps.map((s, i) => (
-              <div
-                key={i}
-                role="option"
-                aria-selected={i === index && !running}
-                className={i === current ? 'list-item running' : 'list-item'}
-                onClick={() => setSelected(i)}
-                onDoubleClick={() => !running && setEditing({ index: i })}
+        {section === 'triggers' && <TriggerSection />}
+        {section === 'schedules' && <ScheduleSection />}
+        {section === 'sequence' && (
+          <Card title={t('automation.steps', { count: steps.length })} icon={Workflow} fill>
+            <div className="row">
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Plus}
+                disabled={running}
+                onClick={() => setEditing({ index: null })}
+                data-testid="step-new"
               >
-                <span className="badge">{i + 1}</span>
-                <span className="title mono">{describeStep(s)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="row">
-            <Button
-              variant={running ? 'danger' : 'success'}
-              icon={running ? Square : Play}
-              wide
-              onClick={() => (running ? stop(t('automation.stopped.manual')) : void start())}
-              data-testid="automation-run"
-            >
-              {running ? t('automation.cancel') : t('automation.start')}
-            </Button>
-            <Check checked={loop} onChange={setLoop}>
-              {t('common.repeat')}
-            </Check>
-            <span className="spacer" />
-            <span className="muted" data-testid="automation-status">
-              {status}
-            </span>
-          </div>
-        </Card>
+                {t('common.new')}
+              </Button>
+              <Button
+                size="sm"
+                icon={Pencil}
+                disabled={running || index < 0}
+                onClick={() => setEditing({ index })}
+              >
+                {t('common.edit')}
+              </Button>
+              <Button
+                size="sm"
+                icon={Trash2}
+                disabled={running || index < 0}
+                onClick={() => setSteps(steps.filter((_, i) => i !== index))}
+              >
+                {t('common.delete')}
+              </Button>
+              <Button
+                size="sm"
+                variant={recording ? 'danger' : 'default'}
+                icon={recording ? Square : Circle}
+                disabled={running}
+                title={t('macro.tip')}
+                onClick={() => (recording ? stopRecording() : startRecording())}
+                data-testid="macro-record"
+              >
+                {recording ? t('macro.stop', { count: recorded }) : t('macro.record')}
+              </Button>
+              <span className="spacer" />
+              <Button
+                size="sm"
+                iconOnly
+                icon={ArrowUp}
+                disabled={running}
+                onClick={() => move(-1)}
+                title={t('common.moveUp')}
+              >
+                {t('common.moveUp')}
+              </Button>
+              <Button
+                size="sm"
+                iconOnly
+                icon={ArrowDown}
+                disabled={running}
+                onClick={() => move(1)}
+                title={t('common.moveDown')}
+              >
+                {t('common.moveDown')}
+              </Button>
+            </div>
+            <div className="list" role="listbox" data-testid="step-list">
+              {steps.length === 0 && <Empty icon={Workflow}>{t('automation.empty')}</Empty>}
+              {steps.map((s, i) => (
+                <div
+                  key={i}
+                  role="option"
+                  aria-selected={i === index && !running}
+                  className={i === current ? 'list-item running' : 'list-item'}
+                  onClick={() => setSelected(i)}
+                  onDoubleClick={() => !running && setEditing({ index: i })}
+                >
+                  <span className="badge">{i + 1}</span>
+                  <span className="title mono">{describeStep(s)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="row">
+              <Button
+                variant={running ? 'danger' : 'success'}
+                icon={running ? Square : Play}
+                wide
+                onClick={() => (running ? stop(t('automation.stopped.manual')) : void start())}
+                data-testid="automation-run"
+              >
+                {running ? t('automation.cancel') : t('automation.start')}
+              </Button>
+              <Check checked={loop} onChange={setLoop}>
+                {t('common.repeat')}
+              </Check>
+              <span className="spacer" />
+              <span className="muted" data-testid="automation-status">
+                {status}
+              </span>
+            </div>
+          </Card>
+        )}
         <Card
           title={t('automation.protocol')}
+          icon={ScrollText}
           fill
           actions={
             <Button size="sm" variant="ghost" icon={Eraser} onClick={() => log.current?.clear()}>
@@ -315,5 +384,169 @@ export function AutomationPage(): ReactNode {
         />
       )}
     </>
+  );
+}
+
+/** List with toolbar for triggers and schedules (same handling as the sequence list). */
+function ItemList<T extends { name: string; enabled: boolean }>({
+  items,
+  counts,
+  describe,
+  onChange,
+  editor,
+  testId,
+}: {
+  items: T[];
+  counts: readonly number[];
+  describe: (item: T) => string;
+  onChange: (items: T[]) => void;
+  editor: (item: T | undefined, save: (item: T) => void, close: () => void) => ReactNode;
+  testId: string;
+}): ReactNode {
+  const t = useT();
+  const [selected, setSelected] = useState(0);
+  const [editing, setEditing] = useState<{ index: number | null } | null>(null);
+  const index = Math.min(selected, items.length - 1);
+  return (
+    <>
+      <div className="row">
+        <Button
+          variant="primary"
+          size="sm"
+          icon={Plus}
+          onClick={() => setEditing({ index: null })}
+          data-testid={`${testId}-new`}
+        >
+          {t('common.new')}
+        </Button>
+        <Button size="sm" icon={Pencil} disabled={index < 0} onClick={() => setEditing({ index })}>
+          {t('common.edit')}
+        </Button>
+        <Button
+          size="sm"
+          icon={Trash2}
+          disabled={index < 0}
+          onClick={() => onChange(items.filter((_, i) => i !== index))}
+        >
+          {t('common.delete')}
+        </Button>
+      </div>
+      <div className="list" role="listbox" data-testid={`${testId}-list`}>
+        {items.length === 0 && <Empty icon={Zap}>{t('automation.listEmpty')}</Empty>}
+        {items.map((item, i) => (
+          <div
+            key={i}
+            role="option"
+            aria-selected={i === index}
+            className="list-item"
+            onClick={() => setSelected(i)}
+            onDoubleClick={() => setEditing({ index: i })}
+          >
+            <span onClick={(e) => e.stopPropagation()}>
+              <Check
+                checked={item.enabled}
+                onChange={(enabled) =>
+                  onChange(items.map((x, j) => (j === i ? { ...x, enabled } : x)))
+                }
+                title={t('automation.itemEnabled')}
+              >
+                {''}
+              </Check>
+            </span>
+            <span className="title">
+              <b>{item.name || '—'}</b>
+              <span className="sub mono">{describe(item)}</span>
+            </span>
+            <span className="badge" title={t('automation.count')}>
+              {counts[i] ?? 0}×
+            </span>
+          </div>
+        ))}
+      </div>
+      {editing &&
+        editor(
+          editing.index === null ? undefined : items[editing.index],
+          (item) => {
+            if (editing.index === null) {
+              onChange([...items, item]);
+              setSelected(items.length);
+            } else {
+              onChange(items.map((x, i) => (i === editing.index ? item : x)));
+            }
+            setEditing(null);
+          },
+          () => setEditing(null),
+        )}
+    </>
+  );
+}
+
+function TriggerSection(): ReactNode {
+  const t = useT();
+  const triggers = useStore(appStore, (s) => s.settings.triggers);
+  const on = useStore(automationStore, (a) => a.triggersOn);
+  const counts = useStore(automationStore, (a) => a.triggerCounts);
+  return (
+    <Card title={t('trigger.title', { count: triggers.length })} icon={Zap} fill>
+      <p className="muted small">{t('trigger.description')}</p>
+      <ItemList<Trigger>
+        items={triggers}
+        counts={counts}
+        testId="trigger"
+        onChange={setTriggers}
+        describe={(tr) =>
+          t('trigger.describe', {
+            match: t(`trigger.match.${tr.match}`),
+            pattern: tr.pattern,
+            response: tr.response || '—',
+          })
+        }
+        editor={(item, save, close) => (
+          <TriggerEditor trigger={item} onSave={save} onClose={close} />
+        )}
+      />
+      <div className="row">
+        <Check checked={on} onChange={setTriggersOn} switchStyle testId="triggers-on">
+          {t('trigger.enable')}
+        </Check>
+        <span className="spacer" />
+        <span className="muted" data-testid="trigger-total">
+          {t('automation.fired', { count: counts.reduce((a, b) => a + (b ?? 0), 0) })}
+        </span>
+      </div>
+    </Card>
+  );
+}
+
+function ScheduleSection(): ReactNode {
+  const t = useT();
+  const schedules = useStore(appStore, (s) => s.settings.schedules);
+  const on = useStore(automationStore, (a) => a.schedulerOn);
+  const counts = useStore(automationStore, (a) => a.scheduleCounts);
+  return (
+    <Card title={t('schedule.title', { count: schedules.length })} icon={CalendarClock} fill>
+      <p className="muted small">{t('schedule.description')}</p>
+      <ItemList<Schedule>
+        items={schedules}
+        counts={counts}
+        testId="schedule"
+        onChange={setSchedules}
+        describe={(s) =>
+          t('schedule.describe', { seconds: s.intervalS, fmt: s.fmt, data: s.data || '—' })
+        }
+        editor={(item, save, close) => (
+          <ScheduleEditor schedule={item} onSave={save} onClose={close} />
+        )}
+      />
+      <div className="row">
+        <Check checked={on} onChange={setSchedulerOn} switchStyle testId="scheduler-on">
+          {t('schedule.enable')}
+        </Check>
+        <span className="spacer" />
+        <span className="muted" data-testid="schedule-total">
+          {t('automation.sentCount', { count: counts.reduce((a, b) => a + (b ?? 0), 0) })}
+        </span>
+      </div>
+    </Card>
   );
 }

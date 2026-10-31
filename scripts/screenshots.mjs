@@ -52,13 +52,34 @@ const COMMANDS = [
   { name: INFO, data: 'ATI', fmt: 'ASCII', newline: 'CRLF', delayMs: 400, enabled: true },
   {
     name: MODBUS,
-    data: '01 03 00 00 00 0A C5 CD',
+    data: '01 03 00 00 00 0A',
     fmt: 'HEX',
     newline: 'None',
     delayMs: 500,
     enabled: true,
+    addCrc: true,
+    periodicMs: 2000,
+    description: 'Reads holding registers 0–9 of slave 1; the CRC is appended automatically.',
   },
   { name: RESTART, data: 'AT+RST', fmt: 'ASCII', newline: 'CRLF', delayMs: 1000, enabled: false },
+];
+
+// Automation examples for the trigger and scheduler pictures.
+const TRIGGERS = [
+  {
+    name: 'High humidity',
+    match: 'REGEX',
+    pattern: 'Humidity:4[0-9]',
+    response: 'FAN ON',
+    fmt: 'ASCII',
+    newline: 'CRLF',
+    cooldownMs: 2000,
+  },
+  { name: 'Acknowledge', match: 'HEX', pattern: '06', response: '', fmt: 'ASCII', newline: 'None' },
+];
+const SCHEDULES = [
+  { name: 'Poll status', intervalS: 2, data: 'STATUS?', fmt: 'ASCII', newline: 'CRLF' },
+  { name: 'Keep-alive', intervalS: 30, data: '00', fmt: 'HEX', newline: 'None', enabled: false },
 ];
 
 const STEPS = [
@@ -81,6 +102,10 @@ async function start({ theme = 'light', settings = {} } = {}) {
       simulator: true,
       port: 'sim:sensor',
       baud: 9600,
+      // Modbus sends its CRC little-endian – used by the "Append CRC" example preset.
+      transmitCrc: { bigEndian: false },
+      triggers: TRIGGERS,
+      schedules: SCHEDULES,
       ...settings,
     }),
   );
@@ -226,13 +251,14 @@ async function guide() {
       $('connect-button'),
       groups.nth(3).locator('button').nth(1),
       $('connection-state'),
-      page.locator('nav.tabbar [role="tab"]'),
+      page.locator('.tabbar-tabs [role="tab"]'),
       { target: $('toggle-theme'), at: 'bl' },
       { target: $('open-settings'), at: 'br' },
       { target: $('status-message'), at: 'tr' },
       { target: $('counters'), at: 'tl' },
     ]);
 
+    const checkLabel = (testId) => page.locator('label', { has: $(testId) });
     await shot(page, file('monitor'), [
       page.locator('.card.quick'),
       $('monitor-output'),
@@ -240,10 +266,18 @@ async function guide() {
       page.locator('.opts label'),
       $('monitor-filter'),
       page.getByTitle(/\(Ctrl\+L\)$/),
-      page.locator('.monitor-main .row.nowrap > button').first(),
+      $('toggle-quick'),
       $('send-format'),
+      $('send-newline'),
+      [
+        checkLabel('monitor-crc-auto'),
+        checkLabel('monitor-use-header'),
+        checkLabel('monitor-use-footer'),
+      ],
+      $('monitor-crc-settings'),
+      { target: [$('periodic-ms'), $('periodic-toggle')], at: 'tr' },
+      { target: [$('monitor-header'), $('monitor-footer')], at: 'bl' },
       $('send-input'),
-      page.locator('.sendbar select').nth(1),
       { target: $('send-button'), at: 'tr' },
     ]);
 
@@ -267,6 +301,7 @@ async function guide() {
       presets.locator('dl.detail'),
       presets.locator('.preview'),
       $('preset-send'),
+      $('preset-periodic'),
       [button(presets, m('common.import')), button(presets, m('common.export'))],
     ]);
 
@@ -279,6 +314,9 @@ async function guide() {
       $('command-data'),
       field(editor, m('command.newline')),
       field(editor, m('command.delay')),
+      $('command-periodic'),
+      editor.locator('label', { has: $('command-add-crc') }),
+      $('command-description'),
       $('command-preview'),
       $('command-save'),
     ]);
@@ -310,11 +348,13 @@ async function guide() {
         button(automation, m('common.edit')),
         button(automation, m('common.delete')),
       ],
+      $('macro-record'),
       [automation.getByTitle(m('common.moveUp')), automation.getByTitle(m('common.moveDown'))],
       $('automation-run'),
       automation.locator('label', { hasText: m('automation.repeat') }),
       $('automation-status'),
       $('automation-log'),
+      { target: automation.locator('.segmented'), at: 'tr' },
     ]);
     await $('step-list').locator('[role="option"], li, .list-item').nth(2).click();
     await button(automation, m('common.edit')).click();
@@ -329,6 +369,45 @@ async function guide() {
     ]);
     await page.keyboard.press('Escape');
 
+    await $('automation-section-triggers').click();
+    await $('triggers-on').check();
+    await page.waitForTimeout(3000);
+    await shot(page, file('automation-triggers'), [
+      { target: $('automation-section-triggers'), at: 'tr' },
+      button(automation, m('common.new')),
+      $('trigger-list'),
+      automation.locator('label', { has: $('triggers-on') }),
+      $('trigger-total'),
+      $('automation-log'),
+    ]);
+    await $('trigger-list').getByText('High humidity').dblclick();
+    const triggerEditor = $('trigger-editor');
+    await triggerEditor.waitFor();
+    await shot(page, file('trigger-editor'), [
+      $('trigger-name'),
+      $('trigger-pattern'),
+      $('trigger-match'),
+      field(triggerEditor, m('trigger.cooldown')),
+      $('trigger-response'),
+      [field(triggerEditor, m('command.format')), field(triggerEditor, m('command.newline'))],
+      $('trigger-save'),
+    ]);
+    await page.keyboard.press('Escape');
+    await $('triggers-on').uncheck();
+
+    await $('automation-section-schedules').click();
+    await $('scheduler-on').check();
+    await page.waitForTimeout(4300);
+    await shot(page, file('automation-schedules'), [
+      { target: $('automation-section-schedules'), at: 'tr' },
+      $('schedule-list'),
+      automation.locator('label', { has: $('scheduler-on') }),
+      $('schedule-total'),
+      $('automation-log'),
+    ]);
+    await $('scheduler-on').uncheck();
+    await $('automation-section-sequence').click();
+
     await $('tab-stop').click();
     const stop = $('page-stop');
     await $('stop-pattern').fill('Humidity');
@@ -337,6 +416,7 @@ async function guide() {
     await shot(page, file('stop'), [
       $('stop-mode'),
       [$('stop-pattern'), stop.locator('select').nth(1)],
+      $('stop-action'),
       stop.locator('label', { hasText: m('stop.alsoDisconnect') }),
       $('stop-toggle'),
       $('stop-state'),
@@ -346,47 +426,61 @@ async function guide() {
     await $('tab-crc').click();
     const crc = $('page-crc');
     await $('crc-input').fill('01 03 00 00 00 0A');
+    await $('crc-auto').check();
     await shot(page, file('crc'), [
-      $('crc-format'),
-      $('crc-algo'),
-      $('crc-input'),
-      button(crc, m('crc.single')),
-      $('crc-compare'),
-      $('crc-check-vector'),
-      $('crc-result'),
+      $('crc-tx-algo'),
       $('crc-endian'),
       $('crc-position'),
-      [$('crc-header'), $('crc-include-header')],
-      [$('crc-footer'), $('crc-include-footer')],
-      $('crc-auto'),
+      [checkLabel('crc-include-header'), checkLabel('crc-include-footer')],
+      checkLabel('crc-auto'),
+      crc.locator('.framing-info'),
+      $('crc-example'),
+      { target: $('crc-format'), at: 'tr' },
+      { target: $('crc-algo'), at: 'tr' },
+      { target: $('crc-calc-endian'), at: 'tr' },
+      { target: $('crc-input'), at: 'tr' },
+      $('crc-check-vector'),
+      { target: checkLabel('crc-compare'), at: 'tr' },
+      $('crc-result'),
+      $('crc-calc-packets'),
     ]);
-    await $('crc-compare').click();
+    await $('crc-compare').check();
     await shot(page, file('crc-compare'), [$('crc-table')]);
+    await $('crc-compare').uncheck();
 
-    await button(crc, m('crc.single')).click();
-    await $('crc-input').fill('AA 55 31 32 33 34 35 36 37 38 39 0D 0A');
-    await $('crc-header').fill('AA 55');
-    await $('crc-footer').fill('0D 0A');
-    await $('crc-include-header').uncheck();
-    await $('crc-include-footer').uncheck();
-    await $('crc-position').fill('-1');
-    await $('crc-position').press('Enter');
-    await $('crc-auto').check();
+    // Header and footer are set in the Monitor and added around the data.
+    await $('tab-monitor').click();
+    await $('send-format').selectOption('HEX');
+    await $('send-newline').selectOption('None');
+    await $('monitor-use-header').check();
+    await $('monitor-header').fill('AA 55');
+    await $('monitor-use-footer').check();
+    await $('monitor-footer').fill('0D 0A');
+    await $('tab-crc').click();
+    await $('crc-input').fill('31 32 33 34 35 36 37 38 39');
     await shot(page, file('crc-framing'), [
-      $('crc-input'),
+      crc.locator('.framing-info'),
       $('crc-position'),
-      $('crc-include-header'),
-      $('crc-include-footer'),
-      $('crc-packet'),
+      [checkLabel('crc-include-header'), checkLabel('crc-include-footer')],
+      $('crc-example'),
     ]);
     await $('tab-monitor').click();
-    await $('send-input').fill('AA 55 31 32 33 34 35 36 37 38 39 0D 0A');
+    await $('send-input').fill('31 32 33 34 35 36 37 38 39');
     await shot(page, file('crc-monitor'), [
-      $('monitor-crc-auto'),
+      [
+        checkLabel('monitor-crc-auto'),
+        checkLabel('monitor-use-header'),
+        checkLabel('monitor-use-footer'),
+      ],
+      { target: [$('monitor-header'), $('monitor-footer')], at: 'bl' },
       $('send-input'),
       $('send-preview'),
     ]);
     await $('monitor-crc-auto').uncheck();
+    await $('monitor-use-header').uncheck();
+    await $('monitor-use-footer').uncheck();
+    await $('send-format').selectOption('ASCII');
+    await $('send-newline').selectOption('CRLF');
     await $('send-input').fill('');
 
     await shot(page, file('control-lines'), [
@@ -428,13 +522,18 @@ async function guide() {
     await page.waitForTimeout(9000);
     // Pressure (≈ 1013) would flatten the other curves – hidden via the legend.
     await $('graph-legend').getByText('Pressure').click();
+    await $('graph-stats-toggle').check();
+    await page.waitForTimeout(400);
     await shot(page, file('graph'), [
       $('graph-record'),
       field(graph, m('graph.detection')),
       field(graph, m('graph.separator')),
       field(graph, m('graph.points')),
+      graph.locator('label', { has: $('graph-stats-toggle') }),
+      $('graph-export'),
       button(graph, m('graph.clear')),
       $('graph-legend'),
+      $('graph-stats'),
       $('graph-canvas'),
     ]);
 
@@ -483,12 +582,19 @@ async function guide() {
     const protocol = $('page-protocol');
     await $('protocol-select').selectOption('modbus');
     await $('protocol-example').click();
+    // A damaged telegram, to show the counters.
+    await $('protocol-input').fill('01 03 00 00 00 0A C5 CE');
+    await $('protocol-decode').click();
+    await $('protocol-input').fill('01 03 00 00 00 0A C5 CD');
     await shot(page, file('protocol'), [
       $('protocol-select'),
       $('protocol-input'),
       $('protocol-decode'),
       $('protocol-example'),
       page.locator('label', { has: $('protocol-live') }),
+      page.locator('label', { has: $('protocol-show-invalid') }),
+      { target: $('protocol-stats'), at: 'bl' },
+      { target: [$('protocol-export'), button(protocol, m('common.clearOutput'))], at: 'tr' },
       $('protocol-output'),
     ]);
     await button(protocol, m('common.clearOutput')).click();
@@ -541,6 +647,10 @@ async function guide() {
       }
       await $(`slot-toggle-${i}`).click();
     }
+    // Bridge: forward what the GPS receiver sends to the loopback device in slot 3.
+    await $('bridge-from').selectOption('0');
+    await $('bridge-to').selectOption('2');
+    await $('bridge-on').check();
     await page.waitForTimeout(3500);
     const multiport = $('page-multiport');
     await shot(page, file('multiport'), [
@@ -549,9 +659,13 @@ async function guide() {
       $('slot-3').locator('input'),
       $('slot-toggle-3'),
       $('slot-state-0'),
+      $('slot-counters-0'),
+      $('bridge'),
       $('multiport-output'),
       { target: multiport.locator('.page-header button'), at: 'tr' },
+      { target: button(multiport, m('common.clearOutput')), at: 'tr' },
     ]);
+    await $('bridge-on').uncheck();
     await app.close();
   }
 

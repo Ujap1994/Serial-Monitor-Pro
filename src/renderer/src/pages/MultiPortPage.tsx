@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Cable, Eraser, Plug, RefreshCw, Unplug } from 'lucide-react';
+import { ArrowLeftRight, Cable, Eraser, Plug, RefreshCw, ScrollText, Unplug } from 'lucide-react';
 import { StreamAssembler } from '@shared/core/assembler';
 import { formatBytes, formatText } from '@shared/core/format';
+import { formatCount } from '@shared/i18n';
 import { BAUD_RATES } from '@shared/core/settings';
 import { formatTimestamp } from '@shared/core/timestamp';
 import { TextLog, type TextLogHandle } from '../components/LogView';
-import { Button, Input, PageHeader, Select } from '../components/ui';
+import { Button, Card, Check, Input, PageHeader, Select } from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useLatest } from '../lib/hooks';
 import { useStore } from '../lib/store';
@@ -44,6 +45,14 @@ export function MultiPortPage(): ReactNode {
   const timers = useRef<(ReturnType<typeof setTimeout> | null)[]>(
     Array.from({ length: SLOTS }, () => null),
   );
+  // Byte counters per slot; shown twice per second instead of re-rendering per packet.
+  const counters = useRef(Array.from({ length: SLOTS }, () => ({ rx: 0, tx: 0 })));
+  const [shownCounters, setShownCounters] = useState(() =>
+    Array.from({ length: SLOTS }, () => ({ rx: 0, tx: 0 })),
+  );
+  const [bridge, setBridge] = useState({ on: false, from: 0, to: 1, both: false, bytes: 0 });
+  const bridgeRef = useLatest(bridge);
+  const bridged = useRef(0);
 
   const update = (i: number, patch: Partial<Slot>): void =>
     setSlots((all) => all.map((s, j) => (j === i ? { ...s, ...patch } : s)));
@@ -72,12 +81,41 @@ export function MultiPortPage(): ReactNode {
   }, [slots]);
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      setShownCounters((prev) =>
+        prev.every((p, i) => p.rx === counters.current[i]?.rx && p.tx === counters.current[i]?.tx)
+          ? prev
+          : counters.current.map((c) => ({ ...c })),
+      );
+      setBridge((b) => (b.bytes === bridged.current ? b : { ...b, bytes: bridged.current }));
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
+
+  /** Bridge mode of the Python version: forward everything slot A receives to slot B. */
+  const forward = (from: number, data: Uint8Array): void => {
+    const b = bridgeRef.current;
+    if (!b.on || b.from === b.to) return;
+    const target = from === b.from ? b.to : b.both && from === b.to ? b.from : -1;
+    if (target < 0 || slotsRef.current[target]?.state !== 'connected') return;
+    void window.smp.serial.write(`mp${target}`, data).then((result) => {
+      if (!result.ok) return;
+      const c = counters.current[target];
+      if (c) c.tx += data.length;
+      bridged.current += data.length;
+    });
+  };
+
+  useEffect(() => {
     return multiPortBus.on((event) => {
       const i = Number(event.id.slice(2));
       if (!Number.isInteger(i) || i < 0 || i >= SLOTS) return;
       const assembler = assemblers.current[i] as StreamAssembler;
       if (event.kind === 'data') {
         for (const chunk of event.chunks) {
+          const c = counters.current[i];
+          if (c) c.rx += chunk.data.length;
+          forward(i, chunk.data);
           for (const entry of assembler.push(chunk)) write(i, render(entry.data));
         }
         const prev = timers.current[i];
@@ -123,6 +161,7 @@ export function MultiPortPage(): ReactNode {
     }
     update(i, { state: 'connecting' });
     assemblers.current[i]?.reset();
+    counters.current[i] = { rx: 0, tx: 0 };
     const result = await window.smp.serial.open(`mp${i}`, {
       path: slot.path,
       baudRate: slot.baud,
@@ -159,75 +198,135 @@ export function MultiPortPage(): ReactNode {
         <Button icon={RefreshCw} onClick={() => void refreshPorts()}>
           {t('conn.refresh')}
         </Button>
-        <Button icon={Eraser} onClick={() => log.current?.clear()}>
-          {t('common.clearOutput')}
-        </Button>
       </PageHeader>
-      <div className="slots">
-        {slots.map((slot, i) => {
-          const busy = slot.state === 'connected' || slot.state === 'connecting';
-          return (
-            <div
-              key={i}
-              className="slot"
-              style={{ ['--slot-color' as string]: SLOT_COLORS[i] }}
-              data-testid={`slot-${i}`}
-            >
-              <Select
-                value={pathOf(slot)}
-                disabled={busy}
-                options={
-                  ports.length
-                    ? ports.map((p) => ({
-                        value: p.path,
-                        label: p.description ? `${p.path} – ${p.description}` : p.path,
-                      }))
-                    : [{ value: '', label: t('conn.noPorts') }]
-                }
-                onChange={(path) => update(i, { path })}
-                data-testid={`slot-port-${i}`}
-              />
-              <Input
-                mono
-                list="baud-rates-mp"
-                style={{ width: 92 }}
-                defaultValue={slot.baud}
-                disabled={busy}
-                onBlur={(e) => {
-                  const n = Number(e.target.value);
-                  if (Number.isInteger(n) && n >= 50) update(i, { baud: n });
-                  else e.target.value = String(slot.baud);
-                }}
-              />
-              <Button
-                size="sm"
-                variant={slot.state === 'connected' ? 'danger' : 'primary'}
-                icon={slot.state === 'connected' ? Unplug : Plug}
-                disabled={slot.state === 'connecting'}
-                onClick={() => void toggle(i)}
-                data-testid={`slot-toggle-${i}`}
+      <Card title={t('multiport.ports')} icon={Cable}>
+        <div className="slots">
+          {slots.map((slot, i) => {
+            const busy = slot.state === 'connected' || slot.state === 'connecting';
+            return (
+              <div
+                key={i}
+                className="slot"
+                style={{ ['--slot-color' as string]: SLOT_COLORS[i] }}
+                data-testid={`slot-${i}`}
               >
-                {slot.state === 'connected' ? t('conn.disconnect') : t('conn.connect')}
-              </Button>
-              <span className="slot-state" data-state={slot.state} data-testid={`slot-state-${i}`}>
-                ● {stateLabel[slot.state]}
-              </span>
-            </div>
-          );
-        })}
-        <datalist id="baud-rates-mp">
-          {BAUD_RATES.map((b) => (
-            <option key={b} value={b} />
-          ))}
-        </datalist>
-      </div>
-      <TextLog
-        ref={log}
-        maxLines={10000}
-        emptyIcon={Cable}
-        empty={t('multiport.empty')}
-        testId="multiport-output"
-      />
+                <Select
+                  value={pathOf(slot)}
+                  disabled={busy}
+                  options={
+                    ports.length
+                      ? ports.map((p) => ({
+                          value: p.path,
+                          label: p.description ? `${p.path} – ${p.description}` : p.path,
+                        }))
+                      : [{ value: '', label: t('conn.noPorts') }]
+                  }
+                  onChange={(path) => update(i, { path })}
+                  data-testid={`slot-port-${i}`}
+                />
+                <Input
+                  mono
+                  list="baud-rates-mp"
+                  style={{ width: 92 }}
+                  defaultValue={slot.baud}
+                  disabled={busy}
+                  onBlur={(e) => {
+                    const n = Number(e.target.value);
+                    if (Number.isInteger(n) && n >= 50) update(i, { baud: n });
+                    else e.target.value = String(slot.baud);
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant={slot.state === 'connected' ? 'danger' : 'primary'}
+                  icon={slot.state === 'connected' ? Unplug : Plug}
+                  disabled={slot.state === 'connecting'}
+                  onClick={() => void toggle(i)}
+                  data-testid={`slot-toggle-${i}`}
+                >
+                  {slot.state === 'connected' ? t('conn.disconnect') : t('conn.connect')}
+                </Button>
+                <span
+                  className="slot-state"
+                  data-state={slot.state}
+                  data-testid={`slot-state-${i}`}
+                >
+                  ● {stateLabel[slot.state]}
+                </span>
+                <span className="slot-counters mono" data-testid={`slot-counters-${i}`}>
+                  RX {formatCount(shownCounters[i]?.rx ?? 0)} B · TX{' '}
+                  {formatCount(shownCounters[i]?.tx ?? 0)} B
+                </span>
+              </div>
+            );
+          })}
+          <datalist id="baud-rates-mp">
+            {BAUD_RATES.map((b) => (
+              <option key={b} value={b} />
+            ))}
+          </datalist>
+        </div>
+        <div className="bridge" data-testid="bridge">
+          <ArrowLeftRight size={15} strokeWidth={2.2} aria-hidden />
+          <Check
+            checked={bridge.on}
+            onChange={(on) => setBridge((b) => ({ ...b, on }))}
+            switchStyle
+            testId="bridge-on"
+          >
+            {t('multiport.bridge')}
+          </Check>
+          <span className="toolbar-label muted">{t('multiport.bridgeFrom')}</span>
+          <Select<number>
+            value={bridge.from}
+            options={slots.map((_, i) => ({ value: i, label: t('multiport.slot', { n: i + 1 }) }))}
+            onChange={(from) => setBridge((b) => ({ ...b, from }))}
+            data-testid="bridge-from"
+            style={{ width: 110 }}
+          />
+          <span className="toolbar-label muted">{t('multiport.bridgeTo')}</span>
+          <Select<number>
+            value={bridge.to}
+            options={slots.map((_, i) => ({ value: i, label: t('multiport.slot', { n: i + 1 }) }))}
+            onChange={(to) => setBridge((b) => ({ ...b, to }))}
+            data-testid="bridge-to"
+            style={{ width: 110 }}
+          />
+          <Check
+            checked={bridge.both}
+            onChange={(both) => setBridge((b) => ({ ...b, both }))}
+            testId="bridge-both"
+          >
+            {t('multiport.bridgeBoth')}
+          </Check>
+          <span className="spacer" />
+          {bridge.on && bridge.from === bridge.to ? (
+            <span className="badge badge-warn">{t('multiport.bridgeSame')}</span>
+          ) : (
+            <span className="muted small" data-testid="bridge-bytes">
+              {t('multiport.bridged', { bytes: formatCount(bridge.bytes) })}
+            </span>
+          )}
+        </div>
+      </Card>
+      <Card
+        title={t('multiport.combined')}
+        icon={ScrollText}
+        fill
+        actions={
+          <Button size="sm" variant="ghost" icon={Eraser} onClick={() => log.current?.clear()}>
+            {t('common.clearOutput')}
+          </Button>
+        }
+      >
+        <TextLog
+          ref={log}
+          maxLines={10000}
+          emptyIcon={Cable}
+          empty={t('multiport.empty')}
+          testId="multiport-output"
+        />
+      </Card>
     </>
   );
 }

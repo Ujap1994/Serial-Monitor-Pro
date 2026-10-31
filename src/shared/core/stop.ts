@@ -6,11 +6,21 @@ import { parseSendData } from './format';
 
 export type StopMode = 'pattern' | 'bytes' | 'lines' | 'seconds';
 
+/**
+ * What happens when the condition is met (as in the Python version):
+ *  log   – only a log entry
+ *  pause – additionally freeze the Monitor display at the stop point
+ *  save  – freeze and save the Monitor content as CSV without a dialog
+ */
+export const STOP_ACTIONS = ['log', 'pause', 'save'] as const;
+export type StopAction = (typeof STOP_ACTIONS)[number];
+
 export interface StopCondition {
   mode: StopMode;
   pattern: string;
   patternFmt: 'ASCII' | 'HEX';
   limit: number;
+  action: StopAction;
   /** Also close the connection. */
   disconnect: boolean;
 }

@@ -15,7 +15,7 @@ import {
 import { NEWLINES, type Newline } from '@shared/core/commands';
 import { DATA_FORMATS, formatHexInput, type DataFormat } from '@shared/core/format';
 import { PERIODIC_MAX_MS, PERIODIC_MIN_MS } from '@shared/core/settings';
-import { monitorPacket, type TransmitCrcConfig } from '@shared/core/transmit-crc';
+import { monitorPacket, monitorSendBytes, type TransmitCrcConfig } from '@shared/core/transmit-crc';
 import { MonitorView } from '../components/LogView';
 import { PacketPreview } from '../components/PacketPreview';
 import { Button, Card, Check, Input, NumberInput, Select } from '../components/ui';
@@ -29,6 +29,7 @@ import {
   renderOptions,
   sendCommand,
   sendText,
+  setMonitorPaused,
   startFileLog,
   startPeriodic,
   stopFileLog,
@@ -195,7 +196,7 @@ function SendBar(): ReactNode {
   const t = useT();
   const s = useStore(appStore, (st) => st.settings);
   const connected = useStore(appStore, (st) => st.connection === 'connected');
-  const periodic = useStore(appStore, (st) => st.busyTabs.includes('monitor'));
+  const periodic = useStore(appStore, (st) => st.periodic !== null);
   const [text, setText] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const history = useRef<string[]>([]);
@@ -243,87 +244,103 @@ function SendBar(): ReactNode {
   return (
     <div className="sendarea" data-testid="sendarea">
       <div className="sendarea-row">
-        <span className="toolbar-label">{t('monitor.send')}</span>
-        <Select<DataFormat>
-          value={s.sendFormat}
-          options={DATA_FORMATS}
-          data-testid="send-format"
-          title={t('command.format')}
-          style={{ width: 86 }}
-          onChange={(sendFormat) => {
-            updateSettings({ sendFormat });
-            if (sendFormat === 'HEX' && text.trim())
-              setText(formatHexInput(text, -1, hexOptions).text);
-          }}
-        />
-        <span className="toolbar-label muted">{t('monitor.newline')}</span>
-        <Select<Newline>
-          value={s.newline}
-          options={NEWLINES.map((n) => ({ value: n, label: t(`newline.${n}`) }))}
-          onChange={(newline) => updateSettings({ newline })}
-          data-testid="send-newline"
-          style={{ width: 104 }}
-        />
-        <span className="divider-v" />
-        <Check
-          checked={crc.enabled}
-          onChange={(enabled) => setCrc({ enabled })}
-          title={t('crc.addTip')}
-          testId="monitor-crc-auto"
-        >
-          {t('crc.add')}
-        </Check>
-        <Check
-          checked={crc.useHeader}
-          onChange={(useHeader) => setCrc({ useHeader })}
-          title={t('crc.useHeaderTip')}
-          testId="monitor-use-header"
-        >
-          {t('crc.header')}
-        </Check>
-        <Check
-          checked={crc.useFooter}
-          onChange={(useFooter) => setCrc({ useFooter })}
-          title={t('crc.useFooterTip')}
-          testId="monitor-use-footer"
-        >
-          {t('crc.footer')}
-        </Check>
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={ShieldCheck}
-          onClick={() => setTab('crc')}
-          data-testid="monitor-crc-settings"
-        >
-          {t('crc.settings')}
-        </Button>
-        <span className="grow" />
-        <span className="toolbar-label muted" title={t('periodic.tip')}>
-          {t('periodic.label')}
+        <span className="send-group">
+          <span className="toolbar-label">{t('monitor.send')}</span>
+          <Select<DataFormat>
+            value={s.sendFormat}
+            options={DATA_FORMATS}
+            data-testid="send-format"
+            title={t('command.format')}
+            style={{ width: 86 }}
+            onChange={(sendFormat) => {
+              updateSettings({ sendFormat });
+              if (sendFormat === 'HEX' && text.trim())
+                setText(formatHexInput(text, -1, hexOptions).text);
+            }}
+          />
+          <Select<Newline>
+            value={s.newline}
+            options={NEWLINES.map((n) => ({ value: n, label: t(`newline.${n}`) }))}
+            onChange={(newline) => updateSettings({ newline })}
+            title={t('monitor.newline')}
+            aria-label={t('monitor.newline')}
+            data-testid="send-newline"
+            style={{ width: 104 }}
+          />
         </span>
-        <NumberInput
-          value={s.periodicMs}
-          min={PERIODIC_MIN_MS}
-          max={PERIODIC_MAX_MS}
-          onChange={(periodicMs) => updateSettings({ periodicMs })}
-          title={t('periodic.tip')}
-          data-testid="periodic-ms"
-          style={{ width: 92 }}
-        />
-        <Button
-          size="sm"
-          variant={periodic ? 'danger' : 'default'}
-          icon={periodic ? Square : Repeat}
-          data-testid="periodic-toggle"
-          title={t('periodic.tip')}
-          onClick={() => {
-            if (periodic) stopPeriodic();
-            else void startPeriodic(() => latest.current);
-          }}
-        >
-          {periodic ? t('periodic.stop') : t('periodic.start')}
-        </Button>
+        <span className="send-group">
+          <Check
+            checked={crc.enabled}
+            onChange={(enabled) => setCrc({ enabled })}
+            title={t('crc.addTip')}
+            testId="monitor-crc-auto"
+          >
+            {t('crc.add')}
+          </Check>
+          <Check
+            checked={crc.useHeader}
+            onChange={(useHeader) => setCrc({ useHeader })}
+            title={t('crc.useHeaderTip')}
+            testId="monitor-use-header"
+          >
+            {t('crc.header')}
+          </Check>
+          <Check
+            checked={crc.useFooter}
+            onChange={(useFooter) => setCrc({ useFooter })}
+            title={t('crc.useFooterTip')}
+            testId="monitor-use-footer"
+          >
+            {t('crc.footer')}
+          </Check>
+          <Button
+            size="sm"
+            variant="ghost"
+            iconOnly
+            icon={ShieldCheck}
+            title={t('crc.settings')}
+            onClick={() => setTab('crc')}
+            data-testid="monitor-crc-settings"
+          >
+            {t('crc.settings')}
+          </Button>
+        </span>
+        <span className="send-group send-group-end">
+          <span className="toolbar-label muted" title={t('periodic.tip')}>
+            {t('periodic.label')}
+          </span>
+          <NumberInput
+            value={s.periodicMs}
+            min={PERIODIC_MIN_MS}
+            max={PERIODIC_MAX_MS}
+            onChange={(periodicMs) => updateSettings({ periodicMs })}
+            title={t('periodic.tip')}
+            data-testid="periodic-ms"
+            style={{ width: 92 }}
+          />
+          <Button
+            size="sm"
+            variant={periodic ? 'danger' : 'default'}
+            icon={periodic ? Square : Repeat}
+            data-testid="periodic-toggle"
+            title={t('periodic.tip')}
+            onClick={() => {
+              if (periodic) stopPeriodic();
+              else
+                void startPeriodic({
+                  label: t('monitor.inputLabel'),
+                  next: () => {
+                    const { text, fmt, newline } = latest.current;
+                    const crcConfig = appStore.get().settings.transmitCrc;
+                    return { data: monitorSendBytes(text, fmt, newline, crcConfig), fmt };
+                  },
+                  intervalMs: () => appStore.get().settings.periodicMs,
+                });
+            }}
+          >
+            {periodic ? t('periodic.stopShort') : t('periodic.startShort')}
+          </Button>
+        </span>
       </div>
       <div className="sendarea-row">
         <Input
@@ -426,6 +443,7 @@ function SendBar(): ReactNode {
 export function MonitorPage(): ReactNode {
   const t = useT();
   const s = useStore(appStore, (st) => st.settings);
+  const paused = useStore(appStore, (st) => st.monitorPaused);
   const [filter, setFilter] = useState('');
   const [stats, setStats] = useState({ shown: 0, total: 0 });
 
@@ -458,6 +476,14 @@ export function MonitorPage(): ReactNode {
             )
           }
         />
+        {paused && (
+          <div className="notice row" data-testid="monitor-paused">
+            <span className="grow">{t('monitor.pausedBanner')}</span>
+            <Button size="sm" onClick={() => setMonitorPaused(false)}>
+              {t('stop.resume')}
+            </Button>
+          </div>
+        )}
         <DisplayOptions
           shown={stats.shown}
           total={stats.total}

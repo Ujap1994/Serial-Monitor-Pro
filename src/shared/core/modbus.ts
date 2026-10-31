@@ -32,8 +32,6 @@ function exceptionName(code: number): string {
 /** Decodes a Modbus RTU telegram into readable text. */
 export function decodeModbusRtu(frame: Uint8Array): string {
   if (frame.length < 4) return t('modbus.tooShort');
-  const slave = frame[0] ?? 0;
-  const func = frame[1] ?? 0;
   const body = frame.subarray(0, -2);
   const crcFound = readUInt(frame.subarray(-2), false);
   const crcCalc = calculateCrc(body, 'CRC-16/MODBUS');
@@ -44,18 +42,65 @@ export function decodeModbusRtu(frame: Uint8Array): string {
           found: crcFound.toString(16).toUpperCase().padStart(4, '0'),
           expected: crcCalc.toString(16).toUpperCase().padStart(4, '0'),
         });
+  return describePdu(body, crcText);
+}
 
+/** LRC of Modbus ASCII: two's complement of the byte sum. */
+export function modbusLrc(bytes: Uint8Array): number {
+  let sum = 0;
+  for (const b of bytes) sum = (sum + b) & 0xff;
+  return -sum & 0xff;
+}
+
+/** ":" + hex pairs (+ optional CR LF) → bytes including the LRC; null if it is no Modbus ASCII frame. */
+export function parseModbusAscii(input: string): Uint8Array | null {
+  const line = (input ?? '').trim();
+  if (!line.startsWith(':')) return null;
+  const hex = line.slice(1);
+  if (!hex.length || hex.length % 2 || !/^[0-9a-fA-F]+$/.test(hex)) return null;
+  return Uint8Array.from(hex.match(/../g) ?? [], (h) => parseInt(h, 16));
+}
+
+export function isModbusAsciiValid(input: string): boolean {
+  const bytes = parseModbusAscii(input);
+  return (
+    !!bytes && bytes.length >= 3 && modbusLrc(bytes.subarray(0, -1)) === bytes[bytes.length - 1]
+  );
+}
+
+/** Decodes a Modbus ASCII telegram (":0103…LRC") into readable text. */
+export function decodeModbusAscii(input: string): string {
+  const bytes = parseModbusAscii(input);
+  if (!bytes) return t('modbus.asciiInvalid');
+  if (bytes.length < 3) return t('modbus.tooShort');
+  const body = bytes.subarray(0, -1);
+  const found = bytes[bytes.length - 1] ?? 0;
+  const expected = modbusLrc(body);
+  const lrcText =
+    found === expected
+      ? 'LRC ✓'
+      : t('modbus.lrcMismatch', {
+          found: found.toString(16).toUpperCase().padStart(2, '0'),
+          expected: expected.toString(16).toUpperCase().padStart(2, '0'),
+        });
+  return describePdu(body, lrcText);
+}
+
+/** Slave, function and data of a telegram without its checksum. */
+function describePdu(body: Uint8Array, checkText: string): string {
+  const slave = body[0] ?? 0;
+  const func = body[1] ?? 0;
   const parts = [`${t('modbus.slave')} ${slave}`];
   if (func & 0x80) {
     const base = func & 0x7f;
-    const code = frame[2] ?? 0;
+    const code = body[2] ?? 0;
     parts.push(t('modbus.errorOn', { func: base, name: functionName(base) }));
     parts.push(t('modbus.exception', { code, name: exceptionName(code) }));
-    return [...parts, crcText].join('  |  ');
+    return [...parts, checkText].join('  |  ');
   }
 
   parts.push(`${t('modbus.function')} ${func} (${functionName(func)})`);
-  const data = frame.subarray(2, -2);
+  const data = body.subarray(2);
   if ([1, 2, 3, 4].includes(func) && data.length) {
     // Request and response look alike, but they can be told apart by the
     // first byte: in a response it is the number of following data bytes
@@ -106,7 +151,7 @@ export function decodeModbusRtu(frame: Uint8Array): string {
   } else if (data.length) {
     parts.push(`${t('modbus.data')}: ${toHexString(data)}`);
   }
-  return [...parts, crcText].join('  |  ');
+  return [...parts, checkText].join('  |  ');
 }
 
 /** Builds a request frame (with CRC) – used by the simulator and the tests. */
@@ -117,4 +162,12 @@ export function buildModbusFrame(body: Uint8Array): Uint8Array {
   out[body.length] = crc & 0xff;
   out[body.length + 1] = (crc >>> 8) & 0xff;
   return out;
+}
+
+/** True when the telegram is long enough and its CRC-16/MODBUS matches. */
+export function isModbusRtuValid(frame: Uint8Array): boolean {
+  if (frame.length < 4) return false;
+  return (
+    readUInt(frame.subarray(-2), false) === calculateCrc(frame.subarray(0, -2), 'CRC-16/MODBUS')
+  );
 }

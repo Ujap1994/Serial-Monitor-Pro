@@ -141,6 +141,11 @@ export interface SmpApi {
   };
   files: {
     saveText(defaultName: string, content: string, filters: FileFilter[]): Promise<string | null>;
+    /**
+     * Saves without a dialog into the capture folder (Documents/Serial Monitor Pro).
+     * Returns the path, or null when the file could not be written.
+     */
+    saveAuto(name: string, content: string): Promise<string | null>;
     openText(filters: FileFilter[]): Promise<{ path: string; content: string } | null>;
     /** null = cancelled; a failure for unreadable or too large files. */
     openBinary(maxBytes: number): Promise<ValueResult<BinaryFile> | null>;
@@ -176,6 +181,7 @@ export const IPC = {
   storeLoad: 'store:load',
   storeSave: 'store:save',
   fileSave: 'file:save',
+  fileSaveAuto: 'file:save-auto',
   fileOpen: 'file:open',
   fileOpenBinary: 'file:open-binary',
   logStart: 'log:start',

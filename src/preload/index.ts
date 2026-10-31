@@ -31,6 +31,7 @@ const api: SmpApi = {
   files: {
     saveText: (defaultName, content, filters) =>
       ipcRenderer.invoke(IPC.fileSave, defaultName, content, filters),
+    saveAuto: (name, content) => ipcRenderer.invoke(IPC.fileSaveAuto, name, content),
     openText: (filters) => ipcRenderer.invoke(IPC.fileOpen, filters),
     openBinary: (maxBytes) => ipcRenderer.invoke(IPC.fileOpenBinary, maxBytes),
   },

@@ -23,6 +23,10 @@ export interface Command {
    * "Add CRC" of the former Python presets. Header/footer of the Monitor are not added.
    */
   addCrc: boolean;
+  /** Free text (Python: "description"). */
+  description: string;
+  /** Pause of periodic sending of this command (Python: "periodic_ms"). */
+  periodicMs: number;
 }
 
 export function newCommand(partial: Partial<Command> = {}): Command {
@@ -34,6 +38,8 @@ export function newCommand(partial: Partial<Command> = {}): Command {
     delayMs: 200,
     enabled: true,
     addCrc: false,
+    description: '',
+    periodicMs: 1000,
     ...partial,
   };
 }
@@ -92,7 +98,7 @@ function int(value: unknown, fallback: number): number {
 
 /**
  * Normalises one command from a file. Accepts the field names of the former
- * Python version (`delay_ms`, `add_crc`) as well, so existing exports keep working.
+ * Python version (`delay_ms`, `add_crc`, `periodic_ms`) as well, so existing exports keep working.
  */
 export function normalizeCommand(value: unknown): Command {
   const d = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
@@ -104,6 +110,8 @@ export function normalizeCommand(value: unknown): Command {
     delayMs: int(d.delayMs ?? d.delay_ms, 200),
     enabled: typeof d.enabled === 'boolean' ? d.enabled : true,
     addCrc: (d.addCrc ?? d.add_crc) === true,
+    description: text(d.description),
+    periodicMs: Math.min(3_600_000, Math.max(10, int(d.periodicMs ?? d.periodic_ms, 1000))),
   };
 }
 

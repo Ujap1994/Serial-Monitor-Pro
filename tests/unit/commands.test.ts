@@ -59,6 +59,15 @@ describe('commands with "Append CRC" (add_crc of the Python presets)', () => {
     expect(validateCommand(cmd, { ...crc, position: 5 }).ok).toBe(false);
   });
 
+  it('reads description and periodic_ms of Python presets and clamps the interval', () => {
+    const cmd = normalizeCommand({ name: 'a', description: 'Status', periodic_ms: '250' });
+    expect(cmd.description).toBe('Status');
+    expect(cmd.periodicMs).toBe(250);
+    expect(normalizeCommand({ periodicMs: 1 }).periodicMs).toBe(10);
+    expect(normalizeCommand({ periodicMs: 1e12 }).periodicMs).toBe(3_600_000);
+    expect(normalizeCommand({}).periodicMs).toBe(1000);
+  });
+
   it('reads add_crc from Python exports and addCrc from own exports', () => {
     expect(normalizeCommand({ name: 'a', add_crc: true }).addCrc).toBe(true);
     expect(normalizeCommand({ name: 'a', addCrc: true }).addCrc).toBe(true);
@@ -107,6 +116,8 @@ describe('commands', () => {
       delayMs: 250,
       enabled: false,
       addCrc: false,
+      description: '',
+      periodicMs: 1000,
     });
   });
 
@@ -124,6 +135,8 @@ describe('commands', () => {
       delayMs: 200,
       enabled: true,
       addCrc: false,
+      description: '',
+      periodicMs: 1000,
     });
   });
 });

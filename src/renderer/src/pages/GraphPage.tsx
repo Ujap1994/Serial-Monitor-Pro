@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Eraser, Pause, Play } from 'lucide-react';
+import { Download, Eraser, LineChart, Pause, Play } from 'lucide-react';
 import { decodeUtf8 } from '@shared/core/bytes';
 import type { GraphConfig } from '@shared/core/settings';
-import { extractValues, type ExtractMode } from '@shared/core/values';
-import { Button, Card, Field, NumberInput, PageHeader, Select } from '../components/ui';
+import { fileStamp } from '@shared/core/timestamp';
+import {
+  extractValues,
+  seriesCsv,
+  seriesStats,
+  type ExtractMode,
+  type SeriesStats,
+} from '@shared/core/values';
+import { Button, Card, Check, Field, NumberInput, PageHeader, Select } from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useLatest } from '../lib/hooks';
 import { useStore } from '../lib/store';
-import { appStore, setBusy, updateSettings } from '../state/app';
+import { appStore, setBusy, setStatus, updateSettings } from '../state/app';
+import { alertDialog, toast } from '../state/ui';
 import { rxBus } from '../state/serial';
 
 export const SERIES_COLORS = [
@@ -144,6 +152,9 @@ export function GraphPage(): ReactNode {
   const [recording, setRecording] = useState(false);
   const [latest, setLatest] = useState<[string, number][]>([]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [showStats, setShowStats] = useState(false);
+  const [stats, setStats] = useState<[string, SeriesStats][]>([]);
+  const showStatsRef = useLatest(showStats);
   const canvas = useRef<HTMLCanvasElement>(null);
   const series = useRef<Series>(new Map());
   const dirty = useRef(true);
@@ -193,6 +204,14 @@ export function GraphPage(): ReactNode {
       dirty.current = false;
       draw(canvas.current, series.current, hiddenRef.current, t('graph.empty'));
       setLatest([...series.current.entries()].map(([n, v]) => [n, v[v.length - 1] ?? 0]));
+      if (showStatsRef.current) {
+        setStats(
+          [...series.current.entries()].flatMap(([n, v]) => {
+            const st = seriesStats(v);
+            return st ? [[n, st] as [string, SeriesStats]] : [];
+          }),
+        );
+      }
     };
     frame = requestAnimationFrame(loop);
     const resize = new ResizeObserver(() => {
@@ -203,16 +222,35 @@ export function GraphPage(): ReactNode {
       cancelAnimationFrame(frame);
       resize.disconnect();
     };
-  }, [tab, t, hiddenRef]);
+  }, [tab, t, hiddenRef, showStatsRef]);
 
   useEffect(() => {
     dirty.current = true;
-  }, [dark, hidden, config.points]);
+  }, [dark, hidden, config.points, showStats]);
+
+  const exportCsv = async (): Promise<void> => {
+    if (!series.current.size) {
+      await alertDialog(t('export.emptyTitle'), t('graph.exportEmpty'));
+      return;
+    }
+    const path = await window.smp.files.saveText(
+      `graph_${fileStamp()}.csv`,
+      seriesCsv(series.current, t('graph.index')),
+      [{ name: 'CSV', extensions: ['csv'] }],
+    );
+    if (path) {
+      setStatus(t('export.saved', { path }), 'ok');
+      toast(t('export.saved', { path }), 'ok');
+    }
+  };
+
+  // At most three decimals, without trailing zeros (21.63, 39, 1011.2).
+  const fmt = (v: number): string => String(Number(v.toFixed(3)));
 
   return (
     <>
       <PageHeader title={t('graph.title')} description={t('graph.description')} />
-      <Card>
+      <Card title={t('graph.controls')} icon={LineChart}>
         <div className="row">
           <Button
             variant={recording ? 'danger' : 'success'}
@@ -257,11 +295,18 @@ export function GraphPage(): ReactNode {
             />
           </Field>
           <span className="spacer" />
+          <Check checked={showStats} onChange={setShowStats} testId="graph-stats-toggle">
+            {t('graph.stats')}
+          </Check>
+          <Button icon={Download} onClick={() => void exportCsv()} data-testid="graph-export">
+            {t('graph.export')}
+          </Button>
           <Button
             icon={Eraser}
             onClick={() => {
               series.current.clear();
               setLatest([]);
+              setStats([]);
               setHidden(new Set());
               dirty.current = true;
             }}
@@ -297,6 +342,38 @@ export function GraphPage(): ReactNode {
           ))
         )}
       </div>
+      {showStats && stats.length > 0 && (
+        <div className="table-wrap graph-stats">
+          <table className="table" data-testid="graph-stats">
+            <thead>
+              <tr>
+                <th>{t('graph.curve')}</th>
+                <th>{t('graph.stat.count')}</th>
+                <th>Min</th>
+                <th>Max</th>
+                <th>Ø</th>
+                <th>{t('graph.stat.stddev')}</th>
+                <th>Median</th>
+                <th>{t('graph.stat.range')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map(([name, st]) => (
+                <tr key={name}>
+                  <td>{name}</td>
+                  <td className="mono">{st.count}</td>
+                  <td className="mono">{fmt(st.min)}</td>
+                  <td className="mono">{fmt(st.max)}</td>
+                  <td className="mono">{fmt(st.mean)}</td>
+                  <td className="mono">{fmt(st.stddev)}</td>
+                  <td className="mono">{fmt(st.median)}</td>
+                  <td className="mono">{fmt(st.range)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div className="plot">
         <canvas ref={canvas} data-testid="graph-canvas" />
       </div>

@@ -48,3 +48,61 @@ export function extractValues(
   });
   return out;
 }
+
+export interface SeriesStats {
+  count: number;
+  min: number;
+  max: number;
+  mean: number;
+  /** Population standard deviation. */
+  stddev: number;
+  median: number;
+  range: number;
+}
+
+/** Statistics of the kept values of one curve (as in the Python version). */
+export function seriesStats(values: readonly number[]): SeriesStats | null {
+  const n = values.length;
+  if (!n) return null;
+  let min = Infinity;
+  let max = -Infinity;
+  let sum = 0;
+  for (const v of values) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+  }
+  const mean = sum / n;
+  let sq = 0;
+  for (const v of values) sq += (v - mean) ** 2;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(n / 2);
+  const median =
+    n % 2 ? (sorted[mid] as number) : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
+  return { count: n, min, max, mean, stddev: Math.sqrt(sq / n), median, range: max - min };
+}
+
+/**
+ * CSV of all curves. The newest values of all curves share the last row – the
+ * same alignment as in the plot; shorter curves have empty cells at the top.
+ */
+export function seriesCsv(
+  series: ReadonlyMap<string, readonly number[]>,
+  indexHeader: string,
+): string {
+  const names = [...series.keys()];
+  const longest = Math.max(0, ...[...series.values()].map((v) => v.length));
+  const cell = (text: string): string =>
+    /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  const rows = [[indexHeader, ...names].map(cell).join(';')];
+  for (let i = 0; i < longest; i++) {
+    const row = [String(i)];
+    for (const name of names) {
+      const v = series.get(name) ?? [];
+      const value = v[i - (longest - v.length)];
+      row.push(value === undefined ? '' : String(value));
+    }
+    rows.push(row.join(';'));
+  }
+  return `\uFEFF${rows.join('\r\n')}\r\n`;
+}

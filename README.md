@@ -51,20 +51,20 @@ Ten tools in one window – free and open source. The interface is available in 
 
 ## ✨ Features
 
-|     | Tool                    | What it does                                                                                                                                                                                                         |
-| --- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🖥️  | **Monitor**             | ASCII / HEX / DEC / BIN, timestamps, Δt between lines, hex dump, UTF-8, visible `\r\n`, filter with highlighting, log to file, export to TXT and CSV. Switching the format re-renders everything already received.   |
-| 📋  | **Presets / Sequences** | Store frequently used commands once, send them with one click from the monitor's quick panel. Import/export as JSON.                                                                                                 |
-| 🛡️  | **CRC tools**           | 11 algorithms (CRC-8, -8/MAXIM, -8/SAE-J1850, -16/IBM, -16/MODBUS, -16/CCITT-False, -16/XMODEM, -16/USB, -32, -32/BZIP2, -32C) – verified against the official check values. Big/little endian, compare all at once. |
-| ⛔  | **Stop condition**      | End a recording automatically when a pattern appears, after _n_ bytes / lines or after a time – optionally disconnect.                                                                                               |
-| 🔤  | **Protocol decoder**    | Modbus RTU (requests, responses, exceptions, writes) and NMEA 0183 (GGA, RMC, …) with checksum verification – live or from a test input.                                                                             |
-| 🤖  | **Automation**          | Sequences of _send_, _wait_, _expect response_ and _note_ steps for repeatable tests – once or in a loop.                                                                                                            |
-| 🔌  | **Multi-port**          | Listen to up to four additional ports in parallel, colour-coded in one view.                                                                                                                                         |
-| 📑  | **Send table**          | Process the stored commands one after another with individual pauses.                                                                                                                                                |
-| 🧩  | **Frame parser**        | Describe your own telegram (header, length field, payload, CRC, footer) – received data is split and verified continuously.                                                                                          |
-| 📈  | **Live graph**          | Extracts numbers from lines such as `Temp:23.5, Pressure:1013` or `1.5;2.5;3.5` and plots them.                                                                                                                      |
-| 🔎  | **Baud rate scanner**   | Listens on all common baud rates and picks the one with readable text.                                                                                                                                               |
-| ♻️  | **Auto-reconnect**      | Reconnects automatically when a device is unplugged and plugged in again (e.g. after a reset).                                                                                                                       |
+|     | Tool                    | What it does                                                                                                                                                                                                                                                                          |
+| --- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖥️  | **Monitor**             | ASCII / HEX / DEC / BIN, timestamps, Δt between lines, hex dump, UTF-8, visible `\r\n`, filter with highlighting, log to file, export to TXT and CSV. Sending with automatic **CRC**, **header and footer** and **periodic** repetition, with a byte-exact preview.                   |
+| 📋  | **Presets / Sequences** | Store frequently used commands once – with optional **appended CRC**, description and own periodic interval – and send them with one click from the quick panel. Import/export as JSON.                                                                                               |
+| 🛡️  | **CRC tools**           | 11 algorithms (CRC-8, -8/MAXIM, -8/SAE-J1850, -16/IBM, -16/MODBUS, -16/CCITT-False, -16/XMODEM, -16/USB, -32, -32/BZIP2, -32C) – verified against the official check values. Transmit settings (byte order, signed position, header/footer in the CRC) and an independent calculator. |
+| ⛔  | **Stop condition**      | End a recording automatically when a pattern appears, after _n_ bytes / lines or after a time – log only, pause the display or save the log as CSV, optionally disconnect.                                                                                                            |
+| 🔤  | **Protocol decoder**    | Modbus RTU and Modbus ASCII (requests, responses, exceptions, writes) and NMEA 0183 (GGA, RMC, …) with checksum verification – live or from a test input, with statistics and CSV export.                                                                                             |
+| 🤖  | **Automation**          | Sequences of _send_, _wait_, _expect response_ and _note_ steps, **macro recording** of manual sends, **triggers** that answer received patterns and a **scheduler** for timed sends.                                                                                                 |
+| 🔌  | **Multi-port**          | Listen to up to four additional ports in parallel, colour-coded in one view, with byte counters and a **bridge** that forwards data between two ports.                                                                                                                                |
+| 📑  | **Send table**          | Process the stored commands one after another with individual pauses.                                                                                                                                                                                                                 |
+| 🧩  | **Frame parser**        | Describe your own telegram (header, length field, payload, CRC, footer) – received data is split and verified continuously.                                                                                                                                                           |
+| 📈  | **Live graph**          | Extracts numbers from lines such as `Temp:23.5, Pressure:1013` or `1.5;2.5;3.5`, plots them, shows statistics (min, max, mean, std. dev., median) and exports CSV.                                                                                                                    |
+| 🔎  | **Baud rate scanner**   | Listens on all common baud rates and picks the one with readable text.                                                                                                                                                                                                                |
+| ♻️  | **Auto-reconnect**      | Reconnects automatically when a device is unplugged and plugged in again (e.g. after a reset).                                                                                                                                                                                        |
 
 Plus: light & dark theme · English & German · keyboard shortcuts · line assembly (no more torn lines) ·
 settings and commands of the former Python version are imported automatically.
@@ -144,9 +144,9 @@ taken with the simulated test devices, so you can follow along without hardware.
 2. [Monitor – receive and send](#2-monitor--receive-and-send)
 3. [Presets / Sequences – stored commands](#3-presets--sequences--stored-commands)
 4. [Send table – commands one after another](#4-send-table--commands-one-after-another)
-5. [Automation – repeatable tests](#5-automation--repeatable-tests)
+5. [Automation – sequences, triggers, scheduler and macros](#5-automation--sequences-triggers-scheduler-and-macros)
 6. [Stop condition – end a recording automatically](#6-stop-condition--end-a-recording-automatically)
-7. [Protocol decoder – Modbus RTU and NMEA 0183](#7-protocol-decoder--modbus-rtu-and-nmea-0183)
+7. [Protocol decoder – Modbus RTU, Modbus ASCII and NMEA 0183](#7-protocol-decoder--modbus-rtu-modbus-ascii-and-nmea-0183)
 8. [Frame parser – your own telegrams](#8-frame-parser--your-own-telegrams)
 9. [CRC tools – checksums](#9-crc-tools--checksums)
 10. [Live graph – plot measurements](#10-live-graph--plot-measurements)
@@ -199,7 +199,8 @@ taken with the simulated test devices, so you can follow along without hardware.
 
 ![Monitor with numbered markers](docs/images/guide/monitor.png)
 
-1. **Quick commands** – your stored commands; a click sends one immediately. They are created under
+1. **Quick commands** – your stored commands; a click sends one immediately. `+CRC` marks a command
+   that gets a CRC appended. They are created under
    [Presets / Sequences](#3-presets--sequences--stored-commands).
 2. **Output** – each line shows the time, the time since the previous reception (Δt), the direction
    and the data: `←` received, `→` sent (with the name of a quick command in brackets), `✓`/`✕`
@@ -220,14 +221,27 @@ taken with the simulated test devices, so you can follow along without hardware.
 5. **Filter** (<kbd>Ctrl</kbd>+<kbd>F</kbd>) – shows only lines containing the text, see below.
 6. **Clear** (<kbd>Ctrl</kbd>+<kbd>L</kbd>) – empties the monitor.
 7. **Show / hide the quick commands** – more room for the output.
-8. **Send format** – how the input is interpreted: ASCII text, HEX bytes (`01 03 0A`, `0x01,0x03`,
-   `01030A` …), decimal (`1 3 10`) or binary (`00000001 00000011`).
-9. **Input** – type and press <kbd>Enter</kbd>. <kbd>↑</kbd> / <kbd>↓</kbd> browse the last 50 inputs.
-   In HEX mode the input is formatted while you type (`0a1b` → `0A 1B`). Invalid input such as `999`
-   in DEC is not sent – a message explains what is wrong.
-10. **Line end** – appended to every input: none, LF (`\n`), CR (`\r`) or CR+LF. Many devices expect a
-    command to end with CR+LF; binary protocols usually need _none_.
-11. **Send.**
+8. **Send format** – how the input (and the header/footer fields) is interpreted: ASCII text, HEX
+   bytes (`01 03 0A`, `0x01,0x03`, `01030A` …), decimal (`1 3 10`) or binary (`00000001 00000011`).
+9. **Line end** – appended last to every input: none, LF (`\n`), CR (`\r`) or CR+LF. Many devices
+   expect a command to end with CR+LF; binary protocols usually need _none_.
+10. **Add CRC, Header, Footer** – the transmit options of the former Python version:
+    - **Add CRC** calculates a checksum for every input and inserts it at the position chosen in
+      [CRC tools](#9-crc-tools--checksums).
+    - **Header** puts the bytes of the header field (13) in front of every input, **Footer** puts the
+      footer bytes after it (before the line end).
+11. **CRC settings** – opens the CRC tools with algorithm, byte order, position and the
+    _include header/footer in CRC_ options.
+12. **Periodic (ms)** and **Start / Stop** – sends the input again and again with the given pause
+    after every send (10 ms … 1 hour). The input is read before every send, so edits take effect
+    immediately. Periodic sending stops by itself on disconnect, on invalid input or a failed write;
+    while it runs, the Monitor tab shows a green dot.
+13. **Header / footer fields** – active only while their checkbox (10) is ticked.
+14. **Input** – type and press <kbd>Enter</kbd>. <kbd>↑</kbd> / <kbd>↓</kbd> browse the last 50
+    inputs. In HEX mode the input is formatted while you type (`0a1b` → `0A 1B`). Invalid input such as
+    `999` in DEC is not sent – a message explains what is wrong.
+15. **Send.** With CRC, header or footer switched on, a coloured preview below the input shows the
+    exact bytes that will go out (see [CRC in the Monitor](#crc-header-and-footer-in-the-monitor)).
 
 #### How received data becomes lines
 
@@ -263,25 +277,34 @@ The filter only hides lines; nothing is deleted and the export still contains ev
 
 1. **New, Edit, Duplicate, Delete** – manage the commands.
 2. **Move up / down** – the order is also the order in the quick panel and the send table.
-3. **Command list** – name and format; _skipped_ means the command is not active in the send table.
-   A double-click on a command sends it.
-4. **Details** of the selected command.
-5. **Will be sent** – exactly the bytes that go out, including the line end, with their number.
+3. **Command list** – name and format; `+CRC` means a CRC is appended, _skipped_ means the command
+   is not active in the send table. A double-click on a command sends it; hovering shows its
+   description.
+4. **Details** of the selected command, including CRC, periodic interval and description.
+5. **Will be sent** – exactly the bytes that go out, including an appended CRC and the line end, with
+   their number.
 6. **Send selected command** (requires a connection).
-7. **Import / Export** – command lists as JSON files, to share them or keep a backup. On import you
-   choose whether the commands are appended or replace the existing ones. Command files of the former
-   Python version can be imported as well.
+7. **Periodic** – sends the selected command again and again with its own interval until you click
+   **Stop periodic**. Only one periodic transmission runs at a time (Monitor input or command).
+8. **Import / Export** – command lists as JSON files, to share them or keep a backup. On import you
+   choose whether the commands are appended or replace the existing ones. Preset files of the former
+   Python version are imported with their CRC option, interval and description.
 
 ![Command editor with numbered markers](docs/images/guide/command-editor.png)
 
 1. **Name** – appears in the quick panel and in the monitor (`→ [Name] …`).
 2. **Format** – ASCII, HEX, DEC or BIN, as in the monitor.
-3. **Data** – the content to send.
+3. **Data** – the content to send, **without** a checksum if _Append CRC_ is used.
 4. **Line end** – none, LF, CR or CR+LF.
 5. **Pause afterwards** – waiting time in milliseconds after this command when commands are sent as a
    sequence in the send table.
-6. **Will be sent** – live preview of the bytes; invalid input is reported here before saving.
-7. **Save.**
+6. **Periodic interval** – the pause between two sends when the command is sent periodically.
+7. **Append CRC** – inserts the CRC configured in the [CRC tools](#9-crc-tools--checksums)
+   (algorithm, byte order, position) before the line end. The Monitor's header and footer are **not**
+   added to commands, so a command keeps exactly the bytes you defined.
+8. **Description** – free text, e.g. what the command does.
+9. **Will be sent** – live preview of the bytes; invalid input is reported here before saving.
+10. **Save.**
 
 ### 4. Send table – commands one after another
 
@@ -297,18 +320,30 @@ The filter only hides lines; nothing is deleted and the export still contains ev
 
 The sequence stops by itself when the connection is closed or a command cannot be sent.
 
-### 5. Automation – repeatable tests
+### 5. Automation – sequences, triggers, scheduler and macros
+
+The automation tab has three sections, switched at the top right: **Sequences**, **Triggers** and
+**Scheduler**. All of them write into the same log on the right. Triggers and the scheduler are
+always **off** after the program starts, so nothing is sent to a device unless you switch them on.
 
 ![Automation with numbered markers](docs/images/guide/automation.png)
 
 1. **Steps** – the sequence, executed from top to bottom; the running step is highlighted.
 2. **New, Edit, Delete** – manage the steps (double-click to edit).
-3. **Move up / down.**
-4. **Run sequence / Cancel.**
-5. **Repeat** – runs the sequence in a loop, e.g. for endurance tests.
-6. **Status** – the current step or the result: _Sequence finished_, _Timeout while waiting for the
+3. **Record macro** – records everything you send by hand (Monitor input, quick commands, presets)
+   together with the pauses in between. **Stop recording (n)** appends the recording to the sequence:
+   a note with the date, then a _wait_ step for every pause and a _send_ step with the exact bytes
+   (HEX, including CRC, header, footer and line end as they were sent). Running the sequence plays
+   the macro back.
+4. **Move up / down.**
+5. **Run sequence / Cancel.**
+6. **Repeat** – runs the sequence in a loop, e.g. for endurance tests.
+7. **Status** – the current step or the result: _Sequence finished_, _Timeout while waiting for the
    response_, _Disconnected_ …
-7. **Log** – every step with a timestamp; successes in green, notes in orange, errors in red.
+8. **Log** – every step, trigger and scheduled send with a timestamp; successes in green, notes in
+   orange, errors in red.
+9. **Sections** – Sequences, Triggers, Scheduler. A green dot shows that triggers or the scheduler are
+   active.
 
 | Step type           | What it does                                                                                                                                                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -330,6 +365,47 @@ The sequence stops by itself when the connection is closed or a command cannot b
 > A typical device test: _Note_ "Self-test" → _Send_ `AT` → _Expect_ `OK` (1000 ms) → _Send_ `ATI` →
 > _Expect_ the firmware name → _Note_ "passed". Tick **Repeat** to run it a thousand times overnight.
 
+#### Triggers – answer received patterns automatically
+
+![Triggers with numbered markers](docs/images/guide/automation-triggers.png)
+
+1. **Triggers** section.
+2. **New, Edit, Delete** – manage the triggers (double-click to edit).
+3. **Trigger list** – the tick switches a single trigger on or off; the badge counts how often it
+   fired since triggers were switched on.
+4. **Triggers active** – the master switch.
+5. **Total** of all firings.
+6. **Log** – every firing with the response that was sent.
+
+![Trigger editor with numbered markers](docs/images/guide/trigger-editor.png)
+
+1. **Name.**
+2. **Pattern** – what has to be received.
+3. **Pattern type:**
+   - **Text** – the text anywhere in the received data, also when it is split across two receptions.
+   - **HEX bytes** – a byte sequence such as `06` (ACK) or `AA 55`.
+   - **Regular expression** – applied to every completely received line, e.g. `^ERR\d+` or
+     `Humidity:4[0-9]`.
+4. **Cooldown** – minimum time between two firings of this trigger. It protects against endless echo
+   loops (a device that repeats what it receives).
+5. **Response** – sent when the trigger fires. Leave it empty to only count and log.
+6. **Format and line end** of the response.
+7. **Save.**
+
+A trigger fires at most once per received packet. Triggers react to the Monitor connection.
+
+#### Scheduler – send at fixed intervals
+
+![Scheduler with numbered markers](docs/images/guide/automation-schedules.png)
+
+1. **Scheduler** section.
+2. **Schedules** – name, interval in seconds (1 s … 24 h) and data; the tick enables a single
+   schedule, the badge counts the sends.
+3. **Scheduler active** – the master switch. The first send of every enabled schedule happens
+   immediately, then once per interval – as long as the port is connected.
+4. **Total** of all scheduled sends.
+5. **Log.**
+
 ### 6. Stop condition – end a recording automatically
 
 ![Stop condition with numbered markers](docs/images/guide/stop.png)
@@ -339,31 +415,47 @@ The sequence stops by itself when the connection is closed or a command cannot b
    - **Number of bytes reached** / **Number of lines reached** – counted from the start of watching.
    - **Time elapsed** – fires after the given number of seconds, even if no data arrives at all.
 2. **Pattern** (or **Limit** / **Seconds**) and its **format** – ASCII text or HEX bytes such as `FF 00`.
-3. **Also close the connection** – disconnects when the condition is met, so nothing else is recorded.
-4. **Start watching / Stop watching.**
-5. **State** – _inactive_, _active – waiting for trigger_ or the reason it triggered.
-6. **History** of the watch.
+3. **Action** – what happens when the condition is met (as in the former Python version):
+   - **Log entry only** – marks the moment; the Monitor keeps running.
+   - **Pause receiving** – the Monitor display freezes at the stop point. Data is still counted but
+     not shown until you click **Resume display** (here or in the banner of the Monitor).
+   - **Pause and save log** – pauses and saves the whole Monitor content as CSV, without a dialog,
+     to `Documents/Serial Monitor Pro/stop_capture_<date>_<time>.csv`. The path is written to the
+     history and the Monitor.
+4. **Also close the connection** – disconnects when the condition is met, so nothing else is recorded.
+5. **Start watching / Stop watching.**
+6. **State** – _inactive_, _active – waiting for trigger_ or the reason it triggered.
+7. **History** of the watch, with **Clear output**.
 
 When the condition is met, a line `■ Stop condition reached – …` marks the moment in the monitor and
 the status line shows the reason – useful for unattended measurements: start watching, leave, and
 later find the recording ending exactly at the event.
 
-### 7. Protocol decoder – Modbus RTU and NMEA 0183
+### 7. Protocol decoder – Modbus RTU, Modbus ASCII and NMEA 0183
 
 ![Protocol decoder with a Modbus RTU example](docs/images/guide/protocol.png)
 
-1. **Protocol** – Modbus RTU or NMEA 0183.
-2. **Test input** – a telegram to decode: Modbus as hex bytes (`01 03 00 00 00 0A C5 CD`), NMEA as a
-   sentence (`$GPGGA,…*47`).
+1. **Protocol** – Modbus RTU, Modbus ASCII or NMEA 0183.
+2. **Test input** – a telegram to decode: Modbus RTU as hex bytes (`01 03 00 00 00 0A C5 CD`),
+   Modbus ASCII as a frame line (`:01030000000AF2`), NMEA as a sentence (`$GPGGA,…*47`).
 3. **Decode** – translates the test input.
 4. **Example** – fills in and decodes a typical telegram of the selected protocol.
 5. **Decode received data continuously** – decodes everything the connected device sends.
-6. **Output** – one line per telegram.
+6. **Show invalid packets** – untick it to hide telegrams with a wrong CRC or checksum; they are still
+   counted.
+7. **Statistics** – total, valid and invalid packets and the success rate.
+8. **Export … / Clear output** – the export saves every decoded packet as CSV (time, protocol, valid,
+   raw data, decoded text); clearing also resets the statistics.
+9. **Output** – one line per telegram; invalid ones in red.
 
 **Modbus RTU** shows the slave address, the function with its name, requests (start address and
 quantity), responses (register values or bytes), single and multiple writes, exception responses
 with their meaning (e.g. _Illegal data address_) and whether the CRC-16 is correct. Known
 functions: 1, 2, 3, 4 (read), 5, 6, 15, 16 (write) and 23 (read/write).
+
+**Modbus ASCII** (as in the former Python version) is decoded the same way; instead of the CRC-16 the
+LRC – the two's complement of the byte sum – is checked. Live decoding reads one frame per line
+(`:` … CR LF).
 
 ![Protocol decoder decoding live NMEA data](docs/images/guide/protocol-nmea.png)
 
@@ -372,7 +464,7 @@ functions: 1, 2, 3, 4 (read), 5, 6, 15, 16 (write) and 23 (read/write).
 3. **Output** – sentence type with its meaning, talker, number of fields, the most important values
    (time, position, satellites, altitude, speed, validity) and whether the checksum after `*` is correct.
    Known types: GGA, RMC, GSA, GSV, VTG, GLL, ZDA; other sentences are shown with their number of
-   fields.
+   fields. Sentences without a checksum count as valid.
 
 ### 8. Frame parser – your own telegrams
 
@@ -396,7 +488,8 @@ layout once, and the frame parser splits the received stream into telegrams and 
 9. **Examples** – load the layout for Modbus RTU or for header + length + CRC.
 10. **Test input** and **Parse** – try the layout on a telegram typed in hex.
 11. **Output** – length, header, data and checksum of every telegram; red lines have a wrong checksum
-    (`CRC ✗ received 6E, expected 91`).
+    (`CRC ✗ received 6E, expected 91`). **Clear output** in the header of the output card also resets
+    the statistics.
 12. **Statistics** – telegrams found, correct and damaged checksums.
 
 **Example** – the binary simulator sends `AA 55 03 01 A7 42 36`:
@@ -414,83 +507,94 @@ layout does not match yet.
 
 ### 9. CRC tools – checksums
 
+The page has two parts, as in the former Python version: on the left the **settings for sending**,
+on the right an independent **calculator**.
+
 ![CRC tools with numbered markers](docs/images/guide/crc.png)
 
-1. **Format** of the data – HEX, ASCII, DEC or BIN.
-2. **Algorithm** – see the table below.
-3. **Data** – the checksum is calculated while you type.
-4. **Calculate.**
-5. **Compare all algorithms** – handy when a data sheet only shows a checksum value and you need to
-   find out which algorithm produced it.
-6. **Check vector "123456789"** – the standard test input; compare the result with the _check_ value
-   of a data sheet to confirm the right algorithm.
-7. **Result** – hexadecimal, decimal, binary and checksum bytes in both byte orders. The lower
-   preview shows the exact packet for the selected byte order and insertion position.
-8. **CRC byte order** – Little-Endian sends the least significant byte first; Big-Endian sends it
-   last. A one-byte CRC is identical in either order. This does not reverse the input bytes.
-9. **Insert position** – a signed position in the original input, before CRC insertion (see below).
-10. **Existing header (HEX)** and **Include header in CRC** – describe the bytes already at the
-    beginning of the input. Clear the checkbox to exclude only these bytes from the calculation.
-11. **Existing footer (HEX)** and **Include footer in CRC** – the same for the end of the input.
-    Framing remains in the transmitted packet either way. Leave the fields empty if unused.
-12. **Automatically calculate and insert CRC in the Monitor input** – enables the same settings
-    for every manual Monitor send. The algorithm, order, position, framing and checkbox states
-    are saved and restored when the application restarts.
+**CRC settings (transmit)** – used by _Add CRC_ in the Monitor and by commands with _Append CRC_:
 
-The framing fields identify existing bytes: they do **not** add header/footer bytes themselves.
-A mismatching or overlapping header/footer produces an error and blocks automatic transmission.
-The CRC is calculated over the selected original bytes once, then inserted as new bytes; no
-placeholder is overwritten. Do not include a previously calculated CRC in the input unless your
-protocol explicitly requires checksumming that byte sequence too.
+1. **Algorithm** – see the table below.
+2. **Byte order** – Big-Endian sends the most significant byte first (`0x1234` → `12 34`),
+   Little-Endian the least significant byte first (`34 12`). A one-byte CRC is identical in either
+   order. The data bytes themselves are never reversed.
+3. **Position** – where the CRC is inserted into the data, see the table below.
+4. **Include header in CRC / Include footer in CRC** – whether the Monitor's header and footer bytes
+   are part of the calculation. They are always part of the transmitted packet when switched on in the
+   Monitor.
+5. **Automatically calculate and insert the CRC when sending from the Monitor** – the same switch as
+   _Add CRC_ in the Monitor.
+6. **Header/footer** currently set in the Monitor, with **Go to Monitor**.
+7. **Transmit example** – the packet the Monitor would send for the data of the calculator, coloured
+   by part (header, data, CRC, footer) and with the bytes the CRC was calculated over. Further down
+   the page: the **parameters** of the selected algorithm (width, polynomial, init, XOR out,
+   reflection) and a short explanation.
 
-#### Signed insertion positions
+**CRC calculator:**
 
-For the original packet `11 22 33 44`, with `CC DD` representing a two-byte checksum:
+8. **Input format** – HEX, ASCII, DEC or BIN.
+9. **Algorithm** – independent of the transmit settings.
+10. **Byte order** of the result bytes.
+11. **Data** – the checksum is calculated while you type.
+12. **Check vector "123456789"** – the standard test input; compare the result with the _check_ value
+    of a data sheet to confirm the right algorithm.
+13. **Compare all algorithms** – handy when a data sheet only shows a checksum value and you need to
+    find out which algorithm produced it.
+14. **Result** – hexadecimal, decimal, binary and the checksum bytes in the selected byte order.
+15. **Data + CRC** in both byte orders, ready to copy.
 
-| Position | Packet after insertion | Meaning                                                        |
-| -------- | ---------------------- | -------------------------------------------------------------- |
-| `0`      | `11 22 33 44 CC DD`    | Append after all original bytes, including a footer if present |
-| `1`      | `11 CC DD 22 33 44`    | Insert before the second byte                                  |
-| `2`      | `11 22 CC DD 33 44`    | Insert before the third byte                                   |
-| `-1`     | `11 22 CC DD 33 44`    | Insert before the penultimate byte                             |
-| `-2`     | `11 CC DD 22 33 44`    | One byte further to the left                                   |
-| `-3`     | `CC DD 11 22 33 44`    | Insert before the first byte                                   |
+All transmit settings are saved and restored when the application restarts.
 
-For `N` original bytes, positive positions use that zero-based offset; negative positions use
-`N + position - 1`. Zero is the special append operation. Out-of-range positions are errors,
-never silently moved. For a one-byte footer, use positive position `N - 1`; `-1` intentionally
-means the **penultimate**, not the last byte.
+#### Positions
 
-![CRC framing and coverage example](docs/images/guide/crc-framing.png)
+The position counts within the **data** you type – between header and footer – like Python slicing.
+For the data `11 22 33 44` and a two-byte checksum `CC DD`:
 
-Example (numbered in the picture): **1** input
-`AA 55 31 32 33 34 35 36 37 38 39 0D 0A`; **2** position `-1`; **3–4** exclude header
-`AA 55` and footer `0D 0A`. With CRC-16/MODBUS and Little-Endian, the covered bytes are ASCII
-`123456789`, whose CRC is `4B37`. **5** The resulting packet is
-`AA 55 31 32 33 34 35 36 37 38 39 37 4B 0D 0A`.
+| Position | Packet after insertion | Meaning                                         |
+| -------- | ---------------------- | ----------------------------------------------- |
+| `0`      | `11 22 33 44 CC DD`    | Append after the data (before a footer)         |
+| `1`      | `11 CC DD 22 33 44`    | The CRC becomes the 2nd byte                    |
+| `2`      | `11 22 CC DD 33 44`    | The CRC becomes the 3rd byte                    |
+| `-1`     | `11 22 33 CC DD 44`    | Before the last byte – the second-to-last place |
+| `-2`     | `11 22 CC DD 33 44`    | Before the second-to-last byte                  |
+| `-4`     | `CC DD 11 22 33 44`    | Before the first byte                           |
 
-#### Automatic CRC in the Monitor
+For `N` data bytes, a positive position `p` inserts before data byte `p + 1`; a negative position
+inserts at `N + p`. Zero is the special _append_ operation. Positions outside the data (here `5` or
+`-5`) are errors: sending is blocked and the preview explains why – the CRC is never moved silently.
+The CRC is inserted as new bytes; nothing is overwritten.
 
-![Monitor with automatic CRC and the actual send preview](docs/images/guide/crc-monitor.png)
+#### CRC, header and footer in the Monitor
 
-**1** Enable Automatic CRC (or use the checkbox in CRC Tools), **2** enter the original packet
-without its CRC, and inspect **3** the HEX send preview before pressing Send. The CRC settings
-button opens the calculator. The preview includes the Monitor's selected line ending.
+![Transmit example with header and footer](docs/images/guide/crc-framing.png)
 
-The selected Monitor line ending is added **after** CRC insertion; it is outside CRC coverage
-and position counting. For the framed example above choose line ending **none**, since `0D 0A`
-is already part of the input. If you need a line ending to participate in the CRC, include its
-bytes explicitly in the input and select **none** for the separate line-ending control.
+1. **Header `AA 55` and footer `0D 0A`**, set in the Monitor.
+2. **Position** `0` – append after the data.
+3. **Include header/footer in CRC** – both off here, so the CRC covers only the data.
+4. **Example** – with CRC-16/MODBUS little-endian, the data `31 … 39` (ASCII `123456789`) gets the CRC
+   `37 4B`: `AA 55 31 32 33 34 35 36 37 38 39 37 4B 0D 0A`. Ticking _Include header in CRC_ changes it
+   to `0B D4` – the CRC over `AA 55 31 … 39`.
 
-Automatic CRC applies only to the manual Monitor input. Quick presets, the Send Table,
-automation, and file transfers retain their configured bytes; this prevents a second CRC being
-added to existing complete commands. For those tools, copy the calculator's final HEX packet
-and disable automatic CRC if pasting it into the manual Monitor input. Changing the Monitor
-display format never changes the bytes sent.
+![Monitor with CRC, header and footer and the send preview](docs/images/guide/crc-monitor.png)
+
+1. **Add CRC, Header, Footer** ticked.
+2. **Header and footer** bytes, in the same format as the input (here HEX).
+3. **Input** – only the data, without header, CRC and footer.
+4. **Preview** – exactly what will be sent, coloured: header and footer violet, CRC highlighted,
+   followed by the algorithm, byte order and position.
+
+The order of a transmission is always: **header + data (with the CRC at its position) + footer +
+line end**. The CRC never covers itself or the line end. If a line end has to be part of the CRC,
+put its bytes into the footer and select line end _none_.
+
+_Add CRC_, header and footer apply to the Monitor input and to periodic sending of the input.
+Stored commands get a CRC only with their own _Append CRC_ option – without header and footer – so
+commands that already contain a checksum never get a second one. Sequences, triggers, the scheduler
+and file transfers send their bytes unchanged.
 
 ![All CRC algorithms compared](docs/images/guide/crc-compare.png)
 
-_All 11 algorithms for the same data at once._
+_All 11 algorithms for the same data at once; a click on a row selects that algorithm._
 
 | Algorithm          | Width | Polynomial   | Init         | Reflected in/out | XOR out      | Check value ("123456789") |
 | ------------------ | ----- | ------------ | ------------ | ---------------- | ------------ | ------------------------- |
@@ -523,10 +627,15 @@ _All 11 algorithms for the same data at once._
 3. **Separator** – comma, semicolon, space or tab. Choose the semicolon if your device uses decimal
    commas (`23,5;48,2`), otherwise the comma would split the number.
 4. **Points** – how many values per curve are kept (50–5000); older ones scroll out.
-5. **Clear** – removes all values.
-6. **Legend** with the latest value of each curve – **click a name to hide or show its curve.** In the
+5. **Statistics** – shows the table (9).
+6. **Export …** – saves all curves as CSV: one column per curve, the newest values of all curves in
+   the last row, exactly as in the plot.
+7. **Clear** – removes all values.
+8. **Legend** with the latest value of each curve – **click a name to hide or show its curve.** In the
    picture, _Pressure_ (≈ 1013) is hidden so that temperature and humidity are not squeezed flat.
-7. **Graph** – the axis scales automatically to the visible curves.
+9. **Statistics table** – per curve, over the kept points: number of values, minimum, maximum,
+   mean (Ø), standard deviation, median and range.
+10. **Graph** – the axis scales automatically to the visible curves.
 
 Recognised numbers: `12`, `-3.5`, `+0.25`, `.5`, `1.5e3`. Values beyond the floating-point range are
 ignored.
@@ -541,12 +650,18 @@ ignored.
 3. **Baud rate** of a slot (8N1).
 4. **Connect / Disconnect** the slot.
 5. **State** of the slot.
-6. **Combined output** – every line with time, port name and in the colour of its slot. Useful to
+6. **Counters** – bytes received and sent by the slot since it was connected.
+7. **Bridge** – forwards everything one slot receives to another slot, optionally in **both
+   directions** (as in the former Python version). Useful to put the application between two devices
+   and watch both sides. The counter shows the forwarded bytes. In the picture, the GPS data of port 1
+   is forwarded to the loopback device of port 3, which echoes it back.
+8. **Combined output** – every line with time, port name and in the colour of its slot. Useful to
    watch a request on one bus and the reaction of another device at the same time.
-7. **Rescan ports** and **Clear output.**
+9. **Rescan ports.**
+10. **Clear output.**
 
-Multi-port only listens; to send, use the monitor. A port that is open in the monitor cannot be
-opened in a slot at the same time, and vice versa.
+Apart from the bridge, multi-port only listens; to send, use the monitor. A port that is open in the
+monitor cannot be opened in a slot at the same time, and vice versa.
 
 ### 12. Baud rate scanner
 
@@ -610,12 +725,17 @@ send format to HEX and the line end to _none_ (an appended `0A` would break the 
   it; _Save output as CSV…_ (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) saves one row per entry
   with the columns time, direction, number of bytes, HEX and text – ready for a spreadsheet.
 - **Commands** – export and import them as JSON on the _Presets / Sequences_ tab or via the _File_ menu.
-- **Stored data** – settings, commands and automation sequences are saved automatically as JSON files
+- **Graph and decoder exports** – _Export …_ on the graph and protocol decoder tabs saves CSV files.
+- **Stop captures** – the stop action _Pause and save log_ writes
+  `stop_capture_<date>_<time>.csv` into `Documents/Serial Monitor Pro` without asking.
+- **Stored data** – settings (including CRC, header/footer, triggers and schedules), commands and
+  automation sequences are saved automatically as JSON files
   in the application's data folder; the exact paths are shown at the bottom of the settings.
   Typical locations: `%APPDATA%\Serial Monitor Pro` (Windows),
   `~/Library/Application Support/Serial Monitor Pro` (macOS) and `~/.config/Serial Monitor Pro` (Linux).
 - **Former Python version** – on the first start its settings, presets and sequences are taken over
-  automatically, if present.
+  automatically, if present – including the CRC, header/footer and periodic settings of the
+  CustomTkinter version (`serial_monitor_settings.json`).
 
 ### Flow control and control lines
 
@@ -913,6 +1033,6 @@ Released under the [MIT licence](LICENSE).
 
 ## Development priorities and collaboration
 
-See the [code audit and CLI assessment](docs/DEVELOPMENT_STATUS.md),
+See the [development status, Python parity table and CLI assessment](docs/DEVELOPMENT_STATUS.md),
 [long-run test checklist](docs/LONG_RUN_TEST_CHECKLIST.md), and the shared
 [Codex / Claude Code work ledger](AGENT_COORDINATION.md).

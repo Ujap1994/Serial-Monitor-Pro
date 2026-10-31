@@ -20,12 +20,23 @@ unchecked items are **not** evidence that a test has passed.
 - [ ] Switch English/German and light/dark; verify controls at 1024×640 and larger windows.
 - [ ] Connect `sim:loopback`; send HEX, ASCII, DEC and BIN; compare TX/RX exact bytes and counters.
 - [ ] CRC-16/MODBUS, `01 03 00 00 00 0A`: verify little-endian `C5 CD`, big-endian `CD C5`.
-- [ ] Verify positions `0`, `1`, `-1` against the README examples; confirm insertion adds bytes.
-- [ ] Verify header and footer included/excluded independently; mismatching framing and out-of-range
-      positions must block sending by both button and Enter, without changing TX count.
-- [ ] Turn automatic CRC off: the original bytes must be sent unchanged. Confirm that a separate
-      newline is appended only once and outside CRC coverage. Check complete presets stay unchanged.
-- [ ] Restart: algorithm, endian, position, framing and enable/coverage checkboxes must persist.
+- [ ] Verify positions `0`, `1`, `-1`, `-2` against the README table (Python slicing); confirm
+      insertion adds bytes and out-of-range positions block sending by both button and Enter.
+- [ ] Monitor header/footer: ticked header and footer are added around the input in the send format;
+      verify _Include header/footer in CRC_ independently against a reference calculation.
+- [ ] Turn _Add CRC_, header and footer off: the original bytes must be sent unchanged. Confirm that a
+      separate newline is appended only once and outside CRC coverage. Commands without _Append CRC_
+      stay unchanged; commands with it get the CRC but never the Monitor header/footer.
+- [ ] Restart: algorithm, byte order, position, header/footer texts, all checkboxes and the periodic
+      interval must persist.
+- [ ] Periodic sending (Monitor input and a preset) at 100 ms for 5 minutes: count TX lines against
+      elapsed time; stop by button and by disconnect.
+- [ ] Triggers: text, HEX and regex patterns with a cooldown against the loopback device – no echo
+      loop. Scheduler: two schedules with different intervals, count sends. Both stay off after restart.
+- [ ] Record a macro of three manual sends, stop recording, run the sequence and compare the bytes.
+- [ ] Stop condition actions: _pause receiving_ freezes the display and _Resume display_ continues;
+      _pause and save log_ writes a complete CSV into `Documents/Serial Monitor Pro`.
+- [ ] Multi-port bridge in one and both directions between two simulator slots; compare counters.
 - [ ] Send a known binary file and compare the received bytes/hash. Test line mode with LF, CRLF,
       empty lines, a long line, and a final line without LF; no implicit CRC/newline is allowed.
 - [ ] Cancel during a long pause, then while the test device pauses transmission through supported
@@ -59,6 +70,8 @@ unchecked items are **not** evidence that a test has passed.
       state or a successful API return. Check CTS/DSR/DCD where the adapter exposes them.
 - [ ] Unplug/replug only the test device; test reconnect, manual disconnect, device reset, sleep/wake
       and busy-port errors. Confirm no unintended automatic transmission after reconnect.
+- [ ] With the device owner's agreement only: periodic sending, a trigger and a schedule at intervals
+      the device is known to tolerate; measure response times before shortening any interval.
 - [ ] Cancel a file transfer under backpressure and verify the application recovers. Record partial
       data received; cancellation cannot retract bytes already queued in hardware.
 

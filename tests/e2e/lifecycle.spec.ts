@@ -33,8 +33,8 @@ test('closing the last window flushes a just-edited setting and exits on every p
   page,
   profile,
 }) => {
-  await page.getByTestId('tab-crc').click();
-  await page.getByTestId('crc-header').fill('AA BB');
+  await page.getByTestId('monitor-use-header').check();
+  await page.getByTestId('monitor-header').fill('AA BB');
   // No debounce wait: a close must flush the final edit itself.
   const process = app.process();
   const closed = app.waitForEvent('close');

@@ -34,6 +34,8 @@ export const monitor = new MonitorModel();
 export const rxBus = new Emitter<Chunk>();
 /** Events of the multi-port connections. */
 export const multiPortBus = new Emitter<SerialEvent>();
+/** Bytes the user sent by hand (Monitor input, presets) – for macro recording. */
+export const manualTxBus = new Emitter<{ data: Uint8Array; t: number }>();
 
 // ── Counters (pushed to the store four times per second) ─────────────────────
 let rxBytes = 0;
@@ -81,6 +83,9 @@ export function renderOptions(): RenderOptions {
 }
 
 function addRx(entry: { t: number; data: Uint8Array }): void {
+  // "Pause receiving" of the stop condition: counters and analysis tools keep
+  // running, but the Monitor display stays frozen at the stop point.
+  if (appStore.get().monitorPaused) return;
   const delta = lastRxTime === null ? null : entry.t - lastRxTime;
   lastRxTime = entry.t;
   monitor.add({ kind: 'rx', t: entry.t, raw: entry.data, delta });
@@ -106,6 +111,12 @@ function flushPending(): void {
 
 export function systemLine(text: string, kind: Entry['kind'] = 'sys'): void {
   monitor.add({ kind, t: Date.now(), text });
+}
+
+export function setMonitorPaused(paused: boolean): void {
+  if (appStore.get().monitorPaused === paused) return;
+  appStore.set({ monitorPaused: paused });
+  systemLine(paused ? t('monitor.paused') : t('monitor.resumed'), paused ? 'err' : 'ok');
 }
 
 export function clearMonitor(): void {
@@ -463,7 +474,12 @@ export async function sendFile(
 }
 
 // ── Sending ──────────────────────────────────────────────────────────────────
-async function write(data: Uint8Array, fmt: DataFormat, label?: string): Promise<boolean> {
+async function write(
+  data: Uint8Array,
+  fmt: DataFormat,
+  label?: string,
+  manual = false,
+): Promise<boolean> {
   if (fileSending) {
     setStatus(t('sendfile.busy'), 'warn');
     return false;
@@ -476,6 +492,7 @@ async function write(data: Uint8Array, fmt: DataFormat, label?: string): Promise
       return false;
     }
     txBytes += data.length;
+    if (manual) manualTxBus.emit({ data, t: performance.now() });
     if (appStore.get().settings.echoSent)
       monitor.add({ kind: 'tx', t: Date.now(), raw: data, fmt, label });
     return true;
@@ -510,7 +527,7 @@ export async function sendText(text: string, fmt: DataFormat, newline: Newline):
     return false;
   }
   if (!data.length) return false;
-  return write(data, fmt);
+  return write(data, fmt, undefined, true);
 }
 
 /**
@@ -537,33 +554,37 @@ export async function sendCommand(cmd: Command, quiet = false): Promise<boolean>
     return false;
   }
   if (!data.length) return false;
-  return write(data, cmd.fmt, cmd.name);
+  return write(data, cmd.fmt, cmd.name, !quiet);
 }
 
-// ── Periodic sending (Monitor) ───────────────────────────────────────────────
+// ── Periodic sending (Monitor input or a preset) ─────────────────────────────
 export type PeriodicStop = 'manual' | 'disconnected' | 'invalid' | 'empty' | 'failed';
 
-export interface PeriodicInput {
-  text: string;
-  fmt: DataFormat;
-  newline: Newline;
+export interface PeriodicSource {
+  /** Name shown in the Monitor and status line. */
+  label: string;
+  /** Bytes for the next send – read anew every time; throws for invalid input. */
+  next: () => { data: Uint8Array; fmt: DataFormat; label?: string };
+  /** Pause after each completed write. */
+  intervalMs: () => number;
 }
 
 let periodicTimer: ReturnType<typeof setTimeout> | null = null;
 let periodicRun = 0;
 
 export function isPeriodicRunning(): boolean {
-  return appStore.get().busyTabs.includes('monitor');
+  return appStore.get().periodic !== null;
 }
 
 /**
- * Sends the Monitor input again and again, like "Periodic" of the Python
- * version. The input is read before every send, so edits apply at once; the
- * interval is the pause after each completed write. Stops on disconnect, on
- * unreadable or empty input and when a write fails.
+ * Sends again and again, like "Periodic" of the Python version (Monitor input
+ * and presets). The data is read before every send, so edits apply at once;
+ * the interval is the pause after each completed write. Only one periodic job
+ * runs at a time. Stops on disconnect, on unreadable or empty data and when a
+ * write fails.
  */
-export async function startPeriodic(read: () => PeriodicInput): Promise<boolean> {
-  if (isPeriodicRunning()) return true;
+export async function startPeriodic(source: PeriodicSource): Promise<boolean> {
+  if (isPeriodicRunning()) return false;
   if (!isConnected()) {
     await alertDialog(t('error.notConnectedTitle'), t('error.notConnected'), 'warn');
     return false;
@@ -573,31 +594,31 @@ export async function startPeriodic(read: () => PeriodicInput): Promise<boolean>
     return false;
   }
   const run = ++periodicRun;
+  appStore.set({ periodic: source.label });
   setBusy('monitor', true);
-  const ms = appStore.get().settings.periodicMs;
-  systemLine(t('periodic.started', { ms }));
-  setStatus(t('periodic.started', { ms }));
+  const text = t('periodic.started', { name: source.label, ms: source.intervalMs() });
+  systemLine(text);
+  setStatus(text);
   const tick = async (): Promise<void> => {
     periodicTimer = null;
     if (run !== periodicRun) return;
-    const { text, fmt, newline } = read();
-    let data: Uint8Array;
+    let next: { data: Uint8Array; fmt: DataFormat; label?: string };
     try {
-      data = monitorSendBytes(text, fmt, newline, appStore.get().settings.transmitCrc);
+      next = source.next();
     } catch (err) {
       stopPeriodic('invalid', err instanceof Error ? err.message : String(err));
       return;
     }
-    if (!data.length) {
+    if (!next.data.length) {
       stopPeriodic('empty');
       return;
     }
-    if (!isConnected() || !(await write(data, fmt))) {
+    if (!isConnected() || !(await write(next.data, next.fmt, next.label))) {
       stopPeriodic(isConnected() ? 'failed' : 'disconnected');
       return;
     }
     if (run !== periodicRun) return;
-    periodicTimer = setTimeout(() => void tick(), appStore.get().settings.periodicMs);
+    periodicTimer = setTimeout(() => void tick(), source.intervalMs());
   };
   await tick();
   return run === periodicRun && isPeriodicRunning();
@@ -608,8 +629,11 @@ export function stopPeriodic(reason: PeriodicStop = 'manual', detail = ''): void
   periodicRun++;
   if (periodicTimer) clearTimeout(periodicTimer);
   periodicTimer = null;
+  const name = appStore.get().periodic ?? '';
+  appStore.set({ periodic: null });
   setBusy('monitor', false);
   const text = t('periodic.stopped', {
+    name,
     reason: t(`periodic.reason.${reason}`) + (detail ? ` – ${detail}` : ''),
   });
   systemLine(text, reason === 'manual' || reason === 'disconnected' ? 'sys' : 'err');

@@ -7,11 +7,11 @@ not an atomic lock: check with the active agent before overlapping work.
 
 ## Active work — 2026-10-31
 
-| Owner       | Status                                                  | Scope / files                                                                                                                                    | Next handoff                                                      |
-| ----------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Codex       | Local validation complete                               | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
-| Claude Code | Paused (usage limit), branch `claude/crc-python-parity` | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
-| Claude Code | Draft integrated by Codex                               | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
+| Owner       | Status                                  | Scope / files                                                                                                                                    | Next handoff                                                      |
+| ----------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Codex       | Local validation complete               | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
+| Claude Code | Done – merged to `main`, release v1.1.0 | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
+| Claude Code | Draft integrated by Codex               | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
 
 Working branch: `codex/crc-transmit`, starting at `48920f1` (1.0.2).
 The original tracked diff is backed up locally at `/private/tmp/smp-before-codex.patch`.
@@ -45,16 +45,23 @@ The draft has been incorporated into this release; no original work was discarde
 
 - Follow-up: file transfer now generates pieces lazily, including the 16 MiB / one-byte-block edge case. The first package run was cancelled before publication to include this fix.
 
-## Claude Code handoff — 2026-10-31 (branch `claude/crc-python-parity`, not merged)
+## Claude Code handoff — 2026-11-01 (merged to `main`, tag `v1.1.0`)
 
-Reworked CRC transmit to match the Python (CustomTkinter) original, per owner request:
-position semantics like Python slicing (-1 = before the last byte; 0 = append), Monitor
-header/footer with use-checkboxes added automatically (send format), CRC include checkboxes,
-per-preset "Append CRC" (`add_crc`), Monitor periodic sending, legacy import of
-`serial_monitor_settings.json`, two-column CRC tab, tab bar actions no longer scroll away,
-form-grid alignment, Monitor options grouping.
+Owner request: restore the Python (CustomTkinter) behaviour and replace the earlier Codex CRC design,
+fix UI inconsistencies, update tests, documentation and screenshots, release.
 
-Checks run: `tsc` (node/web/test) clean, `eslint` clean, `vitest run` 960 passed / 16 skipped.
-NOT yet done: E2E specs (`tests/e2e/crc-transmit.spec.ts` still targets the old design and will
-fail), `scripts/screenshots.mjs` (`.sendbar` selector, CRC views), README/guide/CHANGELOG,
-parity matrix in `docs/DEVELOPMENT_STATUS.md`, `npm run check`, merge to main, 1.1.0 release.
+- CRC transmit like Python: Monitor _Add CRC_ / _Header_ / _Footer_, header/footer added in the send
+  format, signed position with Python slicing (`-1` = before the last byte), include header/footer in
+  CRC, Python defaults. Per-preset _Append CRC_ (`add_crc`), description and periodic interval.
+- Restored Python functions: periodic sending (Monitor and preset), stop actions (log/pause/save),
+  triggers, scheduler, macro recording, multi-port bridge and counters, graph statistics/export,
+  decoder statistics/filter/export, Modbus ASCII, legacy import of `serial_monitor_settings.json`.
+- UI: tab bar actions never scroll away, form fields aligned, output cards with _Clear output_ in the
+  header everywhere, card icons, compact Monitor send area.
+- Parity table and CLI assessment: `docs/DEVELOPMENT_STATUS.md`.
+
+Checks run locally (macOS): `npm run check` passed – format, lint, types, 1089 unit/integration tests
+(16 hardware tests skipped), coverage statements 94.72 % / branches 85.64 % / functions 95.62 % /
+lines 96.74 %, build, 50 Electron E2E tests (3 hardware tests skipped). `npm run docs:screenshots`
+regenerated 29 images; all were inspected. No physical port was opened.
+Open: hardware/long-run acceptance, remaining ⚠️ parity items, CLI (not implemented).

@@ -103,7 +103,11 @@ export function SendTablePage(): ReactNode {
   return (
     <>
       <PageHeader title={t('sendtable.title')} description={t('sendtable.description')} />
-      <Card fill>
+      <Card
+        title={t('sendtable.listTitle', { count: commands.length })}
+        icon={TableProperties}
+        fill
+      >
         <div className="table-wrap" data-testid="send-table">
           {commands.length === 0 ? (
             <Empty icon={TableProperties}>{t('sendtable.empty')}</Empty>

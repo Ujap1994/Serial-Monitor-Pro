@@ -54,6 +54,10 @@ export interface AppState {
   tab: TabId;
   /** Tabs with a running activity (sequence, automation, stop watch …). */
   busyTabs: readonly TabId[];
+  /** Name of the running periodic transmission (Monitor input or preset), null when idle. */
+  periodic: string | null;
+  /** Monitor display paused by a stop condition ("pause receiving"). */
+  monitorPaused: boolean;
 }
 
 export const appStore = createStore<AppState>({
@@ -76,6 +80,8 @@ export const appStore = createStore<AppState>({
   status: { text: '', tone: 'info' },
   tab: 'monitor',
   busyTabs: [],
+  periodic: null,
+  monitorPaused: false,
 });
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');

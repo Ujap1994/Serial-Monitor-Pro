@@ -1,7 +1,7 @@
 // Main process: window, menu, serial ports, storage.
 
 import { createWriteStream, readFileSync, type WriteStream } from 'node:fs';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { finished } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
@@ -197,6 +197,24 @@ function registerIpc(): void {
       return result.filePath;
     },
   );
+  // Unattended captures (stop condition "save"): no dialog, a fixed folder and
+  // a sanitised file name – the renderer cannot choose the directory.
+  ipcMain.handle(IPC.fileSaveAuto, async (_e, name: string, content: string) => {
+    const dir = process.env.SMP_CAPTURE_DIR || join(app.getPath('documents'), 'Serial Monitor Pro');
+    const safe =
+      basename(String(name))
+        .replace(/[^\w.-]/g, '_')
+        .slice(0, 120) || 'capture.txt';
+    try {
+      await mkdir(dir, { recursive: true });
+      const path = join(dir, safe);
+      await writeFile(path, String(content), 'utf8');
+      return path;
+    } catch (err) {
+      console.warn('[files] automatic save failed:', err);
+      return null;
+    }
+  });
   ipcMain.handle(IPC.fileOpen, async (_e, filters: FileFilter[]) => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'], filters });

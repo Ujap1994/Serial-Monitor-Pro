@@ -105,6 +105,15 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
             onChange={(delayMs) => update({ delayMs })}
           />
         </Field>
+        <Field label={t('command.periodic')} hint={t('command.periodicHint')}>
+          <NumberInput
+            value={cmd.periodicMs}
+            min={10}
+            max={3_600_000}
+            onChange={(periodicMs) => update({ periodicMs })}
+            data-testid="command-periodic"
+          />
+        </Field>
         <div className="field">
           <span>CRC</span>
           <Check
@@ -117,6 +126,16 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
           </Check>
           <small className="field-hint">{t('command.addCrcHint')}</small>
         </div>
+        <Field label={t('command.description')} className="span-2">
+          <textarea
+            className="input textarea"
+            rows={2}
+            value={cmd.description}
+            placeholder={t('command.descriptionPlaceholder')}
+            onChange={(e) => update({ description: e.target.value })}
+            data-testid="command-description"
+          />
+        </Field>
         <button type="submit" hidden />
       </form>
       <div>

@@ -76,3 +76,16 @@ export function decodeNmea(input: string): string {
   }
   return [...out, checksumState].join('  |  ');
 }
+
+/**
+ * False for anything that is not a usable NMEA sentence: no leading "$", an
+ * unreadable or wrong checksum. Sentences without a checksum count as valid.
+ */
+export function isNmeaValid(input: string): boolean {
+  const line = (input ?? '').trim();
+  if (!line.startsWith('$')) return false;
+  const star = line.indexOf('*');
+  if (star < 0) return true;
+  const given = parseInt(line.slice(star + 1, star + 3), 16);
+  return !Number.isNaN(given) && given === nmeaChecksum(line.slice(1, star));
+}

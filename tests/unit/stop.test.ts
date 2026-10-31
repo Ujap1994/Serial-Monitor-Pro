@@ -10,6 +10,7 @@ const cond = (patch: Partial<StopCondition>): StopCondition => ({
   pattern: '',
   patternFmt: 'ASCII',
   limit: 1000,
+  action: 'log',
   disconnect: false,
   ...patch,
 });
