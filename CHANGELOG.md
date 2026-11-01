@@ -35,6 +35,8 @@ edition is now available.
 - Presets of the CustomTkinter version (`serial_presets.json`, also from its own preset folder) are
   imported on the first start.
 - _Reset to defaults_ in the settings no longer removes triggers, schedules or the chosen folders.
+- On small windows the output of multi-port, decoder, frame parser, stop condition and graph was
+  squeezed to nothing below the settings; these pages now keep a minimum output height and scroll.
 
 ### Tests
 

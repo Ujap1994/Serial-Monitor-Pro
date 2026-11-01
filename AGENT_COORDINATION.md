@@ -81,5 +81,5 @@ details pane, folders for commands/sequences and logs/exports (copy-if-missing, 
 
 Checks run locally (macOS): `npm run check` passed – 1139 unit/integration tests (16 hardware
 skipped), coverage statements 94.78 % / branches 85.92 % / functions 95.84 % / lines 96.78 %,
-55 Electron E2E tests (3 hardware skipped). Screenshots regenerated (34) and inspected; the storage
+57 Electron E2E tests (3 hardware skipped) incl. a layout test at 1024×640 and 1280×800. Screenshots regenerated (34) and inspected; the storage
 picture is anonymised. No physical port was opened.

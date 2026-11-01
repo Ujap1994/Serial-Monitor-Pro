@@ -108,6 +108,42 @@ button {
 .page-crc {
   overflow: auto;
 }
+/* Tool pages with settings above the output: on small windows the page
+   scrolls instead of squeezing the output to nothing. */
+.page-multiport,
+.page-protocol,
+.page-frameparser,
+.page-stop,
+.page-graph {
+  overflow: auto;
+}
+.page-multiport > *,
+.page-protocol > *,
+.page-frameparser > *,
+.page-stop > *,
+.page-graph > * {
+  flex-shrink: 0;
+}
+.page-multiport > .card-fill,
+.page-protocol > .card-fill,
+.page-frameparser > .card-fill,
+.page-stop > .card-fill {
+  /* Fill the free height, but never less than the minimum (then the page scrolls). */
+  flex: 1 1 0;
+  min-height: 200px;
+}
+.page-multiport > .card-fill {
+  min-height: 230px;
+}
+/* The frame parser's output card also holds the test input. */
+.page-frameparser > .card-fill {
+  min-height: 270px;
+}
+.page-graph > .plot {
+  flex: 1 1 0;
+  min-height: 220px;
+}
+
 .crc-layout {
   display: grid;
   grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.15fr);
