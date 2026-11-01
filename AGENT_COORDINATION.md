@@ -83,3 +83,10 @@ Checks run locally (macOS): `npm run check` passed – 1139 unit/integration tes
 skipped), coverage statements 94.78 % / branches 85.92 % / functions 95.84 % / lines 96.78 %,
 57 Electron E2E tests (3 hardware skipped) incl. a layout test at 1024×640 and 1280×800. Screenshots regenerated (34) and inspected; the storage
 picture is anonymised. No physical port was opened.
+
+Published 1.2.0: a first CI run failed on macOS because the runner's small screen squeezed the
+multi-port output to zero height – fixed in the layout (minimum output heights, page scrolls) and
+covered by `tests/e2e/layout.spec.ts`. CI on `main` (`5bf8a9c`) passed on Linux, Windows and macOS –
+https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41260417056. Release workflow passed –
+https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41260852217. Release with 24 packages and
+SHA256SUMS: https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v1.2.0
