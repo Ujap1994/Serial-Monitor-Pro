@@ -67,6 +67,16 @@ device `sim:testdevice`.
    If an ESP32-WROOM board does not start the upload, hold its **BOOT** button while
    "Connecting…" is shown.
 
+8. After a firmware change, record the replay test data again – every board gets a short, fixed
+   script, recorded with the session capture of the application:
+
+   ```bash
+   SMP_RECORD_FIXTURES=1 npm run soak -- record-fixtures
+   ```
+
+   The captures (`tests/fixtures/captures/`, without port names) are replayed in every build; see
+   [docs/LONG_RUN_TEST.md](../docs/LONG_RUN_TEST.md#device-sessions-as-replay-tests).
+
 ## Device list
 
 ```json

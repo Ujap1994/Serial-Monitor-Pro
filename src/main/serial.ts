@@ -38,8 +38,18 @@ interface Handle {
   sendBreak(ms: number): Promise<void>;
 }
 
+/** Everything that happens on a connection, for the session capture. */
+export type TapEvent =
+  | { d: 'rx' | 'tx'; t: number; data: Uint8Array }
+  | { d: 'open'; t: number; options: OpenOptions }
+  | { d: 'close'; t: number; lost: boolean }
+  | { d: 'lines'; t: number; lines: ControlLines }
+  | { d: 'break'; t: number; ms: number };
+export type Tap = (event: TapEvent) => void;
+
 interface Connection {
   path: string;
+  options: OpenOptions;
   handle: Handle | null;
   opening: Promise<void>;
   closeTask: Promise<void> | null;
@@ -80,7 +90,7 @@ function failure(err: unknown, code?: SerialErrorCode): Failure {
   return { ok: false, error, code: code ?? classifyError(error) };
 }
 
-const now = (): number => performance.timeOrigin + performance.now();
+export const now = (): number => performance.timeOrigin + performance.now();
 
 // ── Port listing ──────────────────────────────────────────────────────────────
 
@@ -335,9 +345,33 @@ function openReal(options: OpenOptions, cb: Callbacks): Promise<Handle> {
 export class SerialManager {
   private readonly connections = new Map<string, Connection>();
   private readonly samples = new Map<string, { stop(): void; done: Promise<void> }>();
+  /** Session captures by connection id – they outlive closing and reopening. */
+  private readonly taps = new Map<string, Tap>();
   private closingAll: Promise<void> | null = null;
 
   constructor(private readonly emit: (event: SerialEvent) => void) {}
+
+  /** Records everything of connection `id` (null = stop). */
+  setTap(id: string, tap: Tap | null): void {
+    if (tap) this.taps.set(id, tap);
+    else this.taps.delete(id);
+  }
+
+  /** Settings of an open connection. */
+  optionsOf(id: string): OpenOptions | null {
+    const conn = this.connections.get(id);
+    return conn && !conn.closing && !conn.ended ? conn.options : null;
+  }
+
+  private tap(id: string, event: TapEvent): void {
+    const tap = this.taps.get(id);
+    if (!tap) return;
+    try {
+      tap(event);
+    } catch (err) {
+      console.warn('[serial] capture failed:', err);
+    }
+  }
 
   private pathInUse(path: string, exceptId?: string): boolean {
     if (this.samples.has(path)) return true;
@@ -361,6 +395,7 @@ export class SerialManager {
     let finishOpening!: () => void;
     const conn: Connection = {
       path: options.path,
+      options,
       handle: null,
       opening: new Promise<void>((done) => {
         finishOpening = done;
@@ -382,6 +417,7 @@ export class SerialManager {
         ? openSimulated(options, callbacks)
         : await openReal(options, callbacks);
       if (conn.closing || conn.ended) return failure('Connection closed while opening');
+      this.tap(id, { d: 'open', t: now(), options });
       return { ok: true };
     } catch (err) {
       if (conn.timer) clearTimeout(conn.timer);
@@ -395,7 +431,9 @@ export class SerialManager {
 
   private received(id: string, conn: Connection, data: Uint8Array): void {
     if (!data.length || conn.closing || conn.ended) return;
-    conn.pending.push({ t: now(), data });
+    const t = now();
+    conn.pending.push({ t, data });
+    this.tap(id, { d: 'rx', t, data });
     conn.timer ??= setTimeout(() => this.flush(id, conn), BATCH_MS);
   }
 
@@ -413,6 +451,7 @@ export class SerialManager {
     if (this.connections.get(id) === conn) this.connections.delete(id);
     if (conn.ended) return;
     conn.ended = true;
+    this.tap(id, { d: 'close', t: now(), lost: lost && !conn.closing });
     this.emit({ kind: 'closed', id, path: conn.path, lost: lost && !conn.closing, error });
   }
 
@@ -437,9 +476,17 @@ export class SerialManager {
     return conn.closeTask;
   }
 
+  /** Closes every connection on `path` (a replay that is removed). */
+  async closePath(path: string): Promise<void> {
+    const ids = [...this.connections].filter(([, c]) => c.path === path).map(([id]) => id);
+    await Promise.allSettled(ids.map((id) => this.close(id)));
+  }
+
   async write(id: string, data: Uint8Array): Promise<Result> {
     const handle = this.live(id);
     if (!handle) return { ok: false, error: 'not connected', code: 'unknown' };
+    // Recorded when handed to the driver: an answer may arrive before the write completes.
+    this.tap(id, { d: 'tx', t: now(), data });
     try {
       await handle.write(data);
       return { ok: true };
@@ -458,6 +505,7 @@ export class SerialManager {
     if (!handle) return { ok: false, error: 'not connected', code: 'unknown' };
     try {
       await handle.setLines(lines);
+      this.tap(id, { d: 'lines', t: now(), lines });
       return { ok: true };
     } catch (err) {
       return failure(err);
@@ -477,8 +525,10 @@ export class SerialManager {
   async sendBreak(id: string, ms: number): Promise<Result> {
     const handle = this.live(id);
     if (!handle) return { ok: false, error: 'not connected', code: 'unknown' };
+    const t = now();
     try {
       await handle.sendBreak(ms);
+      this.tap(id, { d: 'break', t, ms });
       return { ok: true };
     } catch (err) {
       return failure(err);

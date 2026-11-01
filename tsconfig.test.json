@@ -22,6 +22,7 @@
     "src/shared/**/*",
     "src/main/serial.ts",
     "src/main/simulator.ts",
+    "src/main/capture.ts",
     "src/main/storage.ts",
     "src/main/constants.ts",
     "src/main/updates.ts",

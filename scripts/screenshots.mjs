@@ -747,6 +747,115 @@ async function guide() {
     await app.close();
   }
 
+  // ── Session capture, replay, ANSI colours and terminal ─────────────────────
+  {
+    const { app, page } = await start({ settings: { port: 'sim:testdevice', baud: 115200 } });
+    const $ = (testId) => id(testId)(page);
+    const profile = profileOf(app);
+    const anonymise = () =>
+      page.evaluate((dir) => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode())
+          node.textContent = node.textContent.replaceAll(dir, '~/Documents/Serial Monitor Pro');
+      }, profile);
+
+    // Capture a short session with the simulated test device.
+    const session = join(profile, 'testdevice-session.smpcap');
+    await app.evaluate(({ dialog }, path) => {
+      dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath: path });
+    }, session);
+    await connect(page, 'sim:testdevice');
+    await page.waitForTimeout(500);
+    await $('capture-toggle').check();
+    await $('send-format').selectOption('ASCII');
+    await $('send-newline').selectOption('LF');
+    for (const text of ['ID?', 'PING 1', 'ECHO capture and replay']) {
+      await $('send-input').fill(text);
+      await $('send-input').press('Enter');
+      await page.waitForTimeout(250);
+    }
+    await anonymise();
+    await shot(page, file('capture'), [$('capture-toggle'), $('status-message')]);
+    await $('capture-toggle').uncheck();
+    await page.waitForTimeout(300);
+    await $('connect-button').click();
+
+    // A console log with ANSI colours, as an ESP32 prints it, replayed in time.
+    const ESC = '\x1b';
+    const lines = [
+      ['32', 'I (29) boot: ESP-IDF v5.3 2nd stage bootloader'],
+      ['32', 'I (312) cpu_start: Starting scheduler on PRO CPU.'],
+      ['32', 'I (402) wifi: connected to SMP-Lab, channel 6'],
+      ['33', 'W (911) sensor: humidity 61 % above warning level'],
+      ['31', 'E (1204) mqtt: broker not reachable, retry in 5 s'],
+      ['32', 'I (1310) app: free heap 241 kB'],
+    ];
+    const text =
+      lines.map(([c, l]) => `${ESC}[0;${c}m${l}${ESC}[0m\r\n`).join('') +
+      `\r\nType 'help' to get the list of commands.\r\n${ESC}[1;36mesp32>${ESC}[0m `;
+    const consoleFile = join(profile, 'esp32-console.smpcap');
+    writeFileSync(
+      consoleFile,
+      `${JSON.stringify({ format: 'smp-capture', version: 1, created: '', app: '' })}\n` +
+        lines
+          .map(([c, l], i) =>
+            JSON.stringify({
+              t: 100 + i * 120,
+              d: 'rx',
+              x: Buffer.from(`${ESC}[0;${c}m${l}${ESC}[0m\r\n`).toString('hex'),
+            }),
+          )
+          .join('\n') +
+        `\n${JSON.stringify({
+          t: 900,
+          d: 'rx',
+          x: Buffer.from(text.slice(text.indexOf('\r\nType'))).toString('hex'),
+        })}\n`,
+    );
+    await app.evaluate(
+      ({ dialog }, files) => {
+        let n = 0;
+        dialog.showOpenDialog = () =>
+          Promise.resolve({ canceled: false, filePaths: [files[n++ % files.length]] });
+      },
+      [session, consoleFile],
+    );
+    await menu(app, 'replay');
+    const replay = $('replay-dialog');
+    await replay.waitFor();
+    await $('replay-load').click();
+    await replay.getByText('testdevice-session.smpcap').waitFor();
+    await $('replay-new-mode-timed').click();
+    await $('replay-new-loop').uncheck();
+    await $('replay-load').click();
+    await replay.getByText('esp32-console.smpcap').waitFor();
+    // Let the confirmations fade out – they would cover the dialog.
+    await page.waitForTimeout(3600);
+    await shot(page, file('replay'), [
+      replay.locator('.segmented', { has: $('replay-new-mode-answer') }),
+      field(replay, m('replay.speed')).first(),
+      $('replay-load'),
+      $('replay-list'),
+    ]);
+    await page.keyboard.press('Escape');
+
+    const consolePort = await $('port-select').inputValue();
+    await menu(app, 'clear');
+    await connect(page, consolePort);
+    await page.waitForTimeout(1500);
+    await shot(page, file('monitor-ansi'), [$('ansi-toggle'), $('monitor-output')]);
+    await $('monitor-view-terminal').click();
+    await page.waitForTimeout(600);
+    await shot(page, file('terminal'), [
+      { target: page.locator('.segmented', { has: $('monitor-view-lines') }), at: 'tr' },
+      $('terminal'),
+      $('terminal-enter'),
+      $('terminal-echo'),
+    ]);
+    await $('monitor-view-lines').click();
+    await app.close();
+  }
+
   // ── Dark appearance with hex dump ──────────────────────────────────────────
   {
     const { app, page } = await start({

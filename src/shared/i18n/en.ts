@@ -825,4 +825,47 @@ export const en: Record<keyof typeof de, string> = {
   'settings.updateHint':
     'Requests the public release list from GitHub. Serial data and device names are not sent. GitHub receives ordinary connection metadata, including your IP address.',
   'about.checkUpdates': 'Check for updates',
+  // Session capture and replay
+  'monitor.capture': 'Capture',
+  'monitor.ansi': 'Colours',
+  'monitor.ansiTip':
+    'Show the ANSI colours of device consoles (ESP-IDF, Zephyr, U-Boot …) and hide other escape sequences',
+  'monitor.captureTip':
+    'Records every byte of this connection with direction and time in a .smpcap file – it can be replayed later as a simulated device',
+  'capture.fileType': 'Serial Monitor Pro capture',
+  'capture.allFiles': 'All files',
+  'capture.started': 'Capture running: {path}',
+  'capture.stopped':
+    'Capture saved: {path} – {rx} B from the device, {tx} B to the device, {duration}',
+  'capture.failed': 'The capture could not be written completely: {error}',
+  'menu.capture': 'Session capture on/off',
+  'menu.replay': 'Replay a capture…',
+  'sim.replay': 'Replay: {name}',
+  'replay.title': 'Replay a capture',
+  'replay.intro':
+    'A session capture becomes a simulated device. It appears in the port list and can be used like the recorded device – without the hardware.',
+  'replay.mode': 'Behaviour',
+  'replay.modeAnswer': 'Answer like the device',
+  'replay.modeAnswerTip':
+    'Whenever the application sends what was sent in the capture, the recorded answer follows with its recorded delay. For devices that answer requests.',
+  'replay.modeTimed': 'Play back in time',
+  'replay.modeTimedTip':
+    'Everything the device sent, on its original timeline; what the application sends is ignored. For streams, logs and boot messages.',
+  'replay.speed': 'Speed',
+  'replay.loop': 'Start again at the end',
+  'replay.load': 'Load capture…',
+  'replay.loaded': 'Loaded captures',
+  'replay.none': 'No capture loaded yet.',
+  'replay.remove': 'Remove',
+  'replay.summary': '{duration} · {rx} B from the device · {tx} B to the device',
+  'replay.recorded': 'Recorded at {baud} baud',
+  'replay.error': 'The capture cannot be replayed: {error}',
+  'replay.tooLarge': 'The file has {size} bytes – captures up to {max} bytes can be replayed.',
+  'replay.added': '{name} is available as port {path}.',
+  'monitor.viewLines': 'Lines',
+  'monitor.viewTerminal': 'Terminal',
+  'terminal.enter': 'Enter sends',
+  'terminal.echo': 'Local echo',
+  'terminal.echoTip': 'Show typed characters yourself – for devices that do not echo them',
+  'terminal.notConnected': 'Not connected – the key was not sent.',
 };

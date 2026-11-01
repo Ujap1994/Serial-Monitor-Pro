@@ -848,4 +848,47 @@ export const de = {
   'settings.updateHint':
     'Fragt die öffentliche Release-Liste bei GitHub ab. Serielle Daten und Gerätenamen werden nicht übertragen. GitHub erhält übliche Verbindungsdaten, darunter deine IP-Adresse.',
   'about.checkUpdates': 'Nach Updates suchen',
+  // Mitschnitt und Wiedergabe
+  'monitor.capture': 'Mitschnitt',
+  'monitor.ansi': 'Farben',
+  'monitor.ansiTip':
+    'ANSI-Farben von Geräte-Konsolen (ESP-IDF, Zephyr, U-Boot …) anzeigen und andere Steuersequenzen ausblenden',
+  'monitor.captureTip':
+    'Zeichnet jedes Byte dieser Verbindung mit Richtung und Zeit in einer .smpcap-Datei auf – sie lässt sich später als simuliertes Gerät abspielen',
+  'capture.fileType': 'Serial-Monitor-Pro-Mitschnitt',
+  'capture.allFiles': 'Alle Dateien',
+  'capture.started': 'Mitschnitt läuft: {path}',
+  'capture.stopped':
+    'Mitschnitt gespeichert: {path} – {rx} B vom Gerät, {tx} B zum Gerät, {duration}',
+  'capture.failed': 'Der Mitschnitt konnte nicht vollständig geschrieben werden: {error}',
+  'menu.capture': 'Mitschnitt ein/aus',
+  'menu.replay': 'Mitschnitt abspielen…',
+  'sim.replay': 'Wiedergabe: {name}',
+  'replay.title': 'Mitschnitt abspielen',
+  'replay.intro':
+    'Ein Mitschnitt wird zum simulierten Gerät. Es erscheint in der Portliste und lässt sich wie das aufgezeichnete Gerät verwenden – ohne die Hardware.',
+  'replay.mode': 'Verhalten',
+  'replay.modeAnswer': 'Wie das Gerät antworten',
+  'replay.modeAnswerTip':
+    'Sendet die Anwendung, was im Mitschnitt gesendet wurde, folgt die aufgezeichnete Antwort mit ihrer aufgezeichneten Verzögerung. Für Geräte, die auf Anfragen antworten.',
+  'replay.modeTimed': 'Zeitgetreu abspielen',
+  'replay.modeTimedTip':
+    'Alles, was das Gerät gesendet hat, im Originaltakt; was die Anwendung sendet, wird ignoriert. Für Datenströme, Logs und Startmeldungen.',
+  'replay.speed': 'Geschwindigkeit',
+  'replay.loop': 'Am Ende von vorn beginnen',
+  'replay.load': 'Mitschnitt laden…',
+  'replay.loaded': 'Geladene Mitschnitte',
+  'replay.none': 'Noch kein Mitschnitt geladen.',
+  'replay.remove': 'Entfernen',
+  'replay.summary': '{duration} · {rx} B vom Gerät · {tx} B zum Gerät',
+  'replay.recorded': 'Aufgezeichnet mit {baud} Baud',
+  'replay.error': 'Der Mitschnitt kann nicht abgespielt werden: {error}',
+  'replay.tooLarge': 'Die Datei hat {size} Bytes – abspielbar sind Mitschnitte bis {max} Bytes.',
+  'replay.added': '{name} steht als Port {path} bereit.',
+  'monitor.viewLines': 'Zeilen',
+  'monitor.viewTerminal': 'Terminal',
+  'terminal.enter': 'Enter sendet',
+  'terminal.echo': 'Lokales Echo',
+  'terminal.echoTip': 'Getippte Zeichen selbst anzeigen – für Geräte, die sie nicht zurücksenden',
+  'terminal.notConnected': 'Nicht verbunden – die Taste wurde nicht gesendet.',
 };

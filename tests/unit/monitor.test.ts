@@ -16,6 +16,7 @@ const base: RenderOptions = {
   display: 'ASCII',
   utf8: false,
   showCrlf: false,
+  ansi: false,
   hexdump: false,
   timestamp: false,
   timestampFormat: 'time-ms',
@@ -104,5 +105,19 @@ describe('MonitorModel', () => {
     model.clear();
     expect(model.size).toBe(0);
     expect(reset).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ANSI colours in the monitor', () => {
+  const esp = bytes(0x1b, ...ascii('[0;31mE (42) boot: failed'), 0x1b, ...ascii('[0m\n'));
+  it('renders coloured segments and keeps the plain text for filter and export', () => {
+    const line = renderEntry(rx(esp), { ...base, ansi: true });
+    expect(line.text).toBe('E (42) boot: failed');
+    expect(line.segments).toEqual([{ text: 'E (42) boot: failed', style: { fg: 1 } }]);
+  });
+  it('shows the escape character as a dot when colours are off', () => {
+    const line = renderEntry(rx(esp), base);
+    expect(line.segments).toBeUndefined();
+    expect(line.text).toBe('.[0;31mE (42) boot: failed.[0m');
   });
 });

@@ -2086,3 +2086,211 @@ a:hover {
   letter-spacing: normal;
   font-size: 12px;
 }
+
+/* ── Replay dialog ─────────────────────────────────────────────────────────── */
+.replay-load {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+}
+.replay-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.replay-options .field {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.replay-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.replay-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.replay-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── ANSI colours of device consoles ─────────────────────────────────────────── */
+:root {
+  --ansi0: #1f2937;
+  --ansi1: #c0392b;
+  --ansi2: #1e8449;
+  --ansi3: #9a7d0a;
+  --ansi4: #1f5fbf;
+  --ansi5: #8e44ad;
+  --ansi6: #138d90;
+  --ansi7: #6b7280;
+  --ansi8: #4b5563;
+  --ansi9: #e74c3c;
+  --ansi10: #27ae60;
+  --ansi11: #b7950b;
+  --ansi12: #2e86de;
+  --ansi13: #a569bd;
+  --ansi14: #17a5a8;
+  --ansi15: #111827;
+}
+:root[data-theme='dark'] {
+  --ansi0: #4b5563;
+  --ansi1: #f87171;
+  --ansi2: #4ade80;
+  --ansi3: #facc15;
+  --ansi4: #60a5fa;
+  --ansi5: #c084fc;
+  --ansi6: #22d3ee;
+  --ansi7: #d1d5db;
+  --ansi8: #9ca3af;
+  --ansi9: #fca5a5;
+  --ansi10: #86efac;
+  --ansi11: #fde047;
+  --ansi12: #93c5fd;
+  --ansi13: #d8b4fe;
+  --ansi14: #67e8f9;
+  --ansi15: #f9fafb;
+}
+.ansi-fg0 {
+  color: var(--ansi0);
+}
+.ansi-fg1 {
+  color: var(--ansi1);
+}
+.ansi-fg2 {
+  color: var(--ansi2);
+}
+.ansi-fg3 {
+  color: var(--ansi3);
+}
+.ansi-fg4 {
+  color: var(--ansi4);
+}
+.ansi-fg5 {
+  color: var(--ansi5);
+}
+.ansi-fg6 {
+  color: var(--ansi6);
+}
+.ansi-fg7 {
+  color: var(--ansi7);
+}
+.ansi-fg8 {
+  color: var(--ansi8);
+}
+.ansi-fg9 {
+  color: var(--ansi9);
+}
+.ansi-fg10 {
+  color: var(--ansi10);
+}
+.ansi-fg11 {
+  color: var(--ansi11);
+}
+.ansi-fg12 {
+  color: var(--ansi12);
+}
+.ansi-fg13 {
+  color: var(--ansi13);
+}
+.ansi-fg14 {
+  color: var(--ansi14);
+}
+.ansi-fg15 {
+  color: var(--ansi15);
+}
+.ansi-bg0 {
+  background: var(--ansi0);
+}
+.ansi-bg1 {
+  background: var(--ansi1);
+}
+.ansi-bg2 {
+  background: var(--ansi2);
+}
+.ansi-bg3 {
+  background: var(--ansi3);
+}
+.ansi-bg4 {
+  background: var(--ansi4);
+}
+.ansi-bg5 {
+  background: var(--ansi5);
+}
+.ansi-bg6 {
+  background: var(--ansi6);
+}
+.ansi-bg7 {
+  background: var(--ansi7);
+}
+.ansi-bg8 {
+  background: var(--ansi8);
+}
+.ansi-bg9 {
+  background: var(--ansi9);
+}
+.ansi-bg10 {
+  background: var(--ansi10);
+}
+.ansi-bg11 {
+  background: var(--ansi11);
+}
+.ansi-bg12 {
+  background: var(--ansi12);
+}
+.ansi-bg13 {
+  background: var(--ansi13);
+}
+.ansi-bg14 {
+  background: var(--ansi14);
+}
+.ansi-bg15 {
+  background: var(--ansi15);
+}
+.ansi-inverse {
+  background: var(--text);
+  color: var(--bg);
+}
+.ansi-bold {
+  font-weight: 700;
+}
+.ansi-dim {
+  opacity: 0.65;
+}
+.ansi-italic {
+  font-style: italic;
+}
+.ansi-underline {
+  text-decoration: underline;
+}
+
+/* ── Terminal view of the monitor ───────────────────────────────────────────── */
+.terminal-host {
+  flex: 1 1 auto;
+  min-height: 160px;
+  padding: 8px 10px;
+  background: var(--monitor-bg);
+  border: 1px solid var(--monitor-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.terminal-host .xterm {
+  height: 100%;
+}

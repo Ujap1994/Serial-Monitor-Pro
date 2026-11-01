@@ -7,6 +7,7 @@ import { monitorSendBytes } from '@shared/core/transmit-crc';
 import { sendPieces, type FileSendMode } from '@shared/core/filesend';
 import { InputError, type DataFormat } from '@shared/core/format';
 import { fileStamp } from '@shared/core/timestamp';
+import { CAPTURE_EXTENSION, formatDuration } from '@shared/core/capture';
 import type {
   BinaryFile,
   Chunk,
@@ -75,6 +76,7 @@ export function renderOptions(): RenderOptions {
     display: s.display,
     utf8: s.utf8,
     showCrlf: s.showCrlf,
+    ansi: s.ansi,
     hexdump: s.hexdump,
     timestamp: s.timestamp,
     timestampFormat: s.timestampFormat,
@@ -154,6 +156,38 @@ export async function stopFileLog(): Promise<void> {
   logActive = false;
   await window.smp.log.stop();
   setStatus(t('log.closed'));
+}
+
+// ── Session capture ──────────────────────────────────────────────────────────
+export async function startCapture(): Promise<boolean> {
+  const path = await window.smp.capture.start(MAIN, `capture_${fileStamp()}.${CAPTURE_EXTENSION}`);
+  if (!path) return false;
+  appStore.set({ capturing: path });
+  setStatus(t('capture.started', { path }), 'ok');
+  return true;
+}
+
+export async function stopCapture(): Promise<void> {
+  const stats = await window.smp.capture.stop();
+  appStore.set({ capturing: null });
+  if (!stats) return;
+  if (stats.error) {
+    setStatus(t('capture.failed', { error: stats.error }), 'error');
+    return;
+  }
+  setStatus(
+    t('capture.stopped', {
+      path: stats.path,
+      rx: formatCount(stats.rxBytes),
+      tx: formatCount(stats.txBytes),
+      duration: formatDuration(stats.durationMs),
+    }),
+    'ok',
+  );
+}
+
+export function toggleCapture(): Promise<unknown> {
+  return appStore.get().capturing ? stopCapture() : startCapture();
 }
 
 // ── Ports ────────────────────────────────────────────────────────────────────
@@ -499,6 +533,27 @@ async function write(
   } finally {
     activeWrites--;
   }
+}
+
+/** Keys typed into the terminal: sent as they are, without a line in the monitor. */
+export async function sendTerminal(data: Uint8Array): Promise<boolean> {
+  if (!data.length) return false;
+  if (!isConnected()) {
+    setStatus(t('terminal.notConnected'), 'warn');
+    return false;
+  }
+  if (fileSending) {
+    setStatus(t('sendfile.busy'), 'warn');
+    return false;
+  }
+  const result = await window.smp.serial.write(MAIN, data);
+  if (!result.ok) {
+    setStatus(t('status.sendFailed'), 'error');
+    return false;
+  }
+  txBytes += data.length;
+  manualTxBus.emit({ data, t: performance.now() });
+  return true;
 }
 
 export function isConnected(): boolean {

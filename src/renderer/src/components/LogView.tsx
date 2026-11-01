@@ -15,6 +15,7 @@ import {
   type RefObject,
 } from 'react';
 import { ArrowDown, type LucideIcon } from 'lucide-react';
+import type { AnsiSegment } from '@shared/core/ansi';
 import { matchesFilter } from '@shared/core/format';
 import { renderEntry, type Entry, type MonitorModel, type RenderOptions } from '../lib/monitor';
 import { useT } from '../lib/i18n';
@@ -23,10 +24,17 @@ import { Button } from './ui';
 
 const BLOCK = 200;
 
-/** Shared scrolling behaviour: follow new lines unless the user scrolled up. */
+/**
+ * Shared scrolling behaviour: follow new lines unless the user scrolled up.
+ * Scrolling reads the height of the whole output, which makes the browser lay it
+ * out – so it happens at most once per frame, never once per line.
+ */
 function useFollow(ref: RefObject<HTMLDivElement | null>) {
   const following = useRef(true);
+  const frame = useRef(0);
   const [behind, setBehind] = useState(false);
+
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
   const onScroll = useCallback(() => {
     const el = ref.current;
@@ -37,10 +45,17 @@ function useFollow(ref: RefObject<HTMLDivElement | null>) {
 
   const afterAppend = useCallback(
     (autoscroll: boolean) => {
-      const el = ref.current;
-      if (!el) return;
-      if (autoscroll && following.current) el.scrollTop = el.scrollHeight;
-      else if (autoscroll) setBehind(true);
+      if (!autoscroll || !ref.current) return;
+      if (!following.current) {
+        setBehind(true);
+        return;
+      }
+      if (frame.current) return;
+      frame.current = requestAnimationFrame(() => {
+        frame.current = 0;
+        const el = ref.current;
+        if (el && following.current) el.scrollTop = el.scrollHeight;
+      });
     },
     [ref],
   );
@@ -48,6 +63,8 @@ function useFollow(ref: RefObject<HTMLDivElement | null>) {
   const jump = useCallback(() => {
     const el = ref.current;
     if (!el) return;
+    cancelAnimationFrame(frame.current);
+    frame.current = 0;
     following.current = true;
     el.scrollTop = el.scrollHeight;
     setBehind(false);
@@ -74,6 +91,32 @@ function highlight(target: HTMLElement, text: string, pattern: string): void {
     idx = lower.indexOf(needle, pos);
   }
   if (pos < text.length) target.append(text.slice(pos));
+}
+
+/** Coloured text: palette colours as classes (they follow the theme), others inline. */
+function appendAnsi(target: HTMLElement, segments: readonly AnsiSegment[]): void {
+  for (const { text, style } of segments) {
+    if (!style) {
+      target.append(text);
+      continue;
+    }
+    const el = document.createElement('span');
+    const fg = style.inverse ? style.bg : style.fg;
+    const bg = style.inverse ? style.fg : style.bg;
+    const classes = ['ansi'];
+    if (typeof fg === 'number') classes.push(`ansi-fg${fg}`);
+    if (typeof bg === 'number') classes.push(`ansi-bg${bg}`);
+    if (style.inverse && fg === undefined) classes.push('ansi-inverse');
+    if (style.bold) classes.push('ansi-bold');
+    if (style.dim) classes.push('ansi-dim');
+    if (style.italic) classes.push('ansi-italic');
+    if (style.underline) classes.push('ansi-underline');
+    el.className = classes.join(' ');
+    if (typeof fg === 'string') el.style.color = fg;
+    if (typeof bg === 'string') el.style.backgroundColor = bg;
+    el.textContent = text;
+    target.append(el);
+  }
 }
 
 function span(cls: string, text: string): HTMLSpanElement {
@@ -108,7 +151,9 @@ class RowWriter {
     row.append(span('ln-dir', line.dir));
     const text = document.createElement('span');
     text.className = 'ln-text';
-    highlight(text, line.text, filtered ? this.filter : '');
+    // Colours of the device; while filtering, the matches are marked instead.
+    if (line.segments && !filtered) appendAnsi(text, line.segments);
+    else highlight(text, line.text, filtered ? this.filter : '');
     row.append(text);
     return row;
   }
@@ -261,6 +306,7 @@ export const TextLog = forwardRef<TextLogHandle, TextLogProps>(function TextLog(
   const t = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const rows = useRef(0);
   const [isEmpty, setIsEmpty] = useState(true);
   const { onScroll, afterAppend, jump, behind } = useFollow(scrollRef);
 
@@ -275,13 +321,28 @@ export const TextLog = forwardRef<TextLogHandle, TextLogProps>(function TextLog(
         const el = span('ln-text', text);
         if (color) el.style.color = color;
         row.append(el);
-        content.append(row);
-        while (content.childElementCount > maxLines) content.firstElementChild?.remove();
-        setIsEmpty(false);
+        // Rows in blocks: the browser skips the layout of blocks out of view.
+        let block = content.lastElementChild as HTMLElement | null;
+        if (!block || block.childElementCount >= BLOCK) {
+          block = document.createElement('div');
+          block.className = 'log-block';
+          content.append(block);
+        }
+        block.append(row);
+        rows.current++;
+        while (rows.current > maxLines) {
+          const first = content.firstElementChild;
+          if (!first) break;
+          first.firstElementChild?.remove();
+          if (!first.childElementCount) first.remove();
+          rows.current--;
+        }
+        if (rows.current === 1) setIsEmpty(false);
         afterAppend(true);
       },
       clear() {
         contentRef.current?.replaceChildren();
+        rows.current = 0;
         setIsEmpty(true);
         jump();
       },

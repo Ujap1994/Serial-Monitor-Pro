@@ -86,14 +86,32 @@ The application is started with a fresh profile and used like this, all at once:
   `03 11 22 33` is sent **periodically** every 250 ms. The device checks every frame.
 - **Graph:** records the sensor stream of that device. **Protocol decoder:** decodes its NMEA stream live.
 - **Multi-port:** the other boards stream into the slots (they were set to `AUTO 100` before the
-  start and are reset to `AUTO 0` afterwards).
+  start and are reset to `AUTO 0` afterwards), shown one panel per port.
+- **Multi-port bridge:** a loopback adapter of the device list (an RS232 adapter with pins 2 and 3
+  bridged; simulator: `sim:loopback`) takes the last slot after its probe came back unchanged. The
+  bridge forwards the stream of the first slot to it in one direction; the adapter sends everything
+  back. At the end the first slot is disconnected and the test compares: every forwarded byte must
+  have come back (adapter TX = forwarded = adapter RX), and the last lines in the adapter's panel
+  must equal those of the source.
 - **Automation:** a trigger watches for `NAK` (rejected frames), the scheduler asks for `STAT?`
   every minute.
 - Every two seconds the test switches tabs; every minute it records the working set of the main,
-  renderer and GPU processes, the number of DOM nodes, the time of a tab change and the byte counters.
+  renderer and GPU processes, the JavaScript heap of the window, the number of DOM nodes (in total
+  and per tab), the time of a tab change, the byte counters and the bytes forwarded by the bridge.
+- With `SMP_SOAK_PROFILE=1` the window's CPU time of minutes 2–3 is profiled; the report lists the
+  functions that used the most time (`soak-reports/renderer.cpuprofile` opens in Chrome DevTools).
 
 **Passed** when the device rejected no frame, accepted at least 90 % of the frames the period allows,
-the trigger never fired and the renderer reported no error.
+the trigger never fired, every byte through the bridge came back unchanged and the renderer reported
+no error. A window that stops reacting fails the run as well: every tab change must finish within
+30 seconds.
+
+This test found a real problem before 1.4.0: the outputs of multi-port, automation, stop condition
+and frame parser scrolled to the newest line after **every** line, which made the browser lay out
+the whole output each time. Under full load (four boards, bridge, graph, decoder, periodic sending)
+the window used 27 of every 60 seconds for that, grew to 1.3 GB and stopped reacting after about
+five minutes. Now the outputs scroll at most once per frame and keep their lines in blocks the
+browser can skip; the same run uses about 380 MB and the window is idle most of the time.
 
 ## Reports
 
@@ -104,6 +122,22 @@ Every run writes `soak-reports/<date-time>[-gui]/`:
   latency p50/p95/p99/max) and the last notes per device, including the device's own counters.
 - `report.json` – everything, for comparisons between runs.
 - `memory.csv` / `samples.csv` – memory over time, for spotting leaks.
+
+## Device sessions as replay tests
+
+The boards of the device list also provide the test data for the automated build: a fixed script
+(identity, ping, echo with UTF-8, a valid and a damaged CRC frame, sensor, NMEA and Modbus streams,
+a burst, statistics, an unknown command; the ESP32-WROOM is restarted to keep its boot messages) is
+recorded with the session capture of the application:
+
+```bash
+SMP_RECORD_FIXTURES=1 npm run soak -- record-fixtures
+```
+
+The captures go to `tests/fixtures/captures/<device>.smpcap` without port names.
+`tests/unit/capture-fixtures.test.ts` replays them in every build: the application's NMEA and Modbus
+decoders and CRC calculation must accept what the real firmware sent, and every capture, replayed as
+a device, must give exactly the recorded answers. Record them again after changing the firmware.
 
 ## Recommended sequence
 

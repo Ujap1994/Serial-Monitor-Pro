@@ -51,20 +51,22 @@ Ten tools in one window – free and open source. The interface is available in 
 
 ## ✨ Features
 
-|     | Tool                    | What it does                                                                                                                                                                                                                                                                          |
-| --- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🖥️  | **Monitor**             | ASCII / HEX / DEC / BIN, timestamps, Δt between lines, hex dump, UTF-8, visible `\r\n`, filter with highlighting, log to file, export to TXT and CSV. Sending with automatic **CRC**, **header and footer** and **periodic** repetition, with a byte-exact preview.                   |
-| 📋  | **Presets / Sequences** | Store frequently used commands once – with optional **appended CRC**, description, own periodic interval and **sequence mode** (steps with pauses) – and send them with one click from the quick panel. Import/export as JSON.                                                        |
-| 🛡️  | **CRC tools**           | 11 algorithms (CRC-8, -8/MAXIM, -8/SAE-J1850, -16/IBM, -16/MODBUS, -16/CCITT-False, -16/XMODEM, -16/USB, -32, -32/BZIP2, -32C) – verified against the official check values. Transmit settings (byte order, signed position, header/footer in the CRC) and an independent calculator. |
-| ⛔  | **Stop condition**      | End a recording automatically when a pattern appears, after _n_ bytes / lines or after a time – log only, pause the display or save the log as CSV, optionally disconnect.                                                                                                            |
-| 🔤  | **Protocol decoder**    | Modbus RTU and Modbus ASCII (requests, responses, exceptions, writes) and NMEA 0183 (GGA, RMC, …) with checksum verification – live or from a test input, with a packet list, **packet details**, statistics and CSV export.                                                          |
-| 🤖  | **Automation**          | Sequences of _send_, _wait_, _expect response_ and _note_ steps, **macro recording** of manual sends, **triggers** that answer received patterns and a **scheduler** for timed sends.                                                                                                 |
-| 🔌  | **Multi-port**          | Listen to up to four additional ports in parallel, colour-coded in one view or **one panel per port**, with byte counters and a **bridge** that forwards data between two ports.                                                                                                      |
-| 📑  | **Send table**          | Process the stored commands one after another with individual pauses.                                                                                                                                                                                                                 |
-| 🧩  | **Frame parser**        | Describe your own telegram (header, length field, payload, CRC, footer) – received data is split and verified continuously.                                                                                                                                                           |
-| 📈  | **Live graph**          | Extracts numbers from lines such as `Temp:23.5, Pressure:1013` or `1.5;2.5;3.5`, or with **own regular expressions per channel**, plots them in **chosen colours**, shows statistics (min, max, mean, std. dev., median) and exports CSV.                                             |
-| 🔎  | **Baud rate scanner**   | Listens on all common baud rates and picks the one with readable text.                                                                                                                                                                                                                |
-| ♻️  | **Auto-reconnect**      | Reconnects automatically when a device is unplugged and plugged in again (e.g. after a reset).                                                                                                                                                                                        |
+|     | Tool                    | What it does                                                                                                                                                                                                                                                                                             |
+| --- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖥️  | **Monitor**             | ASCII / HEX / DEC / BIN, timestamps, Δt between lines, hex dump, UTF-8, visible `\r\n`, **ANSI colours** of device consoles, filter with highlighting, log to file, export to TXT and CSV. Sending with automatic **CRC**, **header and footer** and **periodic** repetition, with a byte-exact preview. |
+| ⌨️  | **Terminal view**       | A real VT terminal for device consoles (ESP-IDF, Zephyr, U-Boot, Linux): colours, cursor movement, progress bars – every key goes to the device at once (Ctrl+C, arrows, Tab).                                                                                                                           |
+| ⏺️  | **Capture & replay**    | Records every byte of a session with direction and time in a `.smpcap` file and replays it as a **simulated device** – it answers like the recorded device or plays back in time. Work and test without the hardware.                                                                                    |
+| 📋  | **Presets / Sequences** | Store frequently used commands once – with optional **appended CRC**, description, own periodic interval and **sequence mode** (steps with pauses) – and send them with one click from the quick panel. Import/export as JSON.                                                                           |
+| 🛡️  | **CRC tools**           | 11 algorithms (CRC-8, -8/MAXIM, -8/SAE-J1850, -16/IBM, -16/MODBUS, -16/CCITT-False, -16/XMODEM, -16/USB, -32, -32/BZIP2, -32C) – verified against the official check values. Transmit settings (byte order, signed position, header/footer in the CRC) and an independent calculator.                    |
+| ⛔  | **Stop condition**      | End a recording automatically when a pattern appears, after _n_ bytes / lines or after a time – log only, pause the display or save the log as CSV, optionally disconnect.                                                                                                                               |
+| 🔤  | **Protocol decoder**    | Modbus RTU and Modbus ASCII (requests, responses, exceptions, writes) and NMEA 0183 (GGA, RMC, …) with checksum verification – live or from a test input, with a packet list, **packet details**, statistics and CSV export.                                                                             |
+| 🤖  | **Automation**          | Sequences of _send_, _wait_, _expect response_ and _note_ steps, **macro recording** of manual sends, **triggers** that answer received patterns and a **scheduler** for timed sends.                                                                                                                    |
+| 🔌  | **Multi-port**          | Listen to up to four additional ports in parallel, colour-coded in one view or **one panel per port**, with byte counters and a **bridge** that forwards data between two ports.                                                                                                                         |
+| 📑  | **Send table**          | Process the stored commands one after another with individual pauses.                                                                                                                                                                                                                                    |
+| 🧩  | **Frame parser**        | Describe your own telegram (header, length field, payload, CRC, footer) – received data is split and verified continuously.                                                                                                                                                                              |
+| 📈  | **Live graph**          | Extracts numbers from lines such as `Temp:23.5, Pressure:1013` or `1.5;2.5;3.5`, or with **own regular expressions per channel**, plots them in **chosen colours**, shows statistics (min, max, mean, std. dev., median) and exports CSV.                                                                |
+| 🔎  | **Baud rate scanner**   | Listens on all common baud rates and picks the one with readable text.                                                                                                                                                                                                                                   |
+| ♻️  | **Auto-reconnect**      | Reconnects automatically when a device is unplugged and plugged in again (e.g. after a reset).                                                                                                                                                                                                           |
 
 Plus: light & dark theme · English & German · keyboard shortcuts · line assembly (no more torn lines) ·
 settings and commands of the former Python version are imported automatically.
@@ -216,8 +218,12 @@ taken with the simulated test devices, so you can follow along without hardware.
      per byte.
    - **`\r\n`** – makes the control characters CR, LF and TAB visible as `\r`, `\n` and `\t`.
    - **Hex dump** – classic byte view with offset, hex values and ASCII column.
+   - **Colours** – shows the ANSI colours of device consoles and hides other escape sequences, see
+     [Colours of device consoles](#colours-of-device-consoles).
    - **Log → file** – asks for a file name and then writes everything continuously to that file,
      until you untick it again (see [section 15](#15-files-logs-exports-and-stored-data)).
+   - **Capture** – records the session byte for byte for a later replay, see
+     [Session capture and replay](#session-capture-and-replay).
 5. **Filter** (<kbd>Ctrl</kbd>+<kbd>F</kbd>) – shows only lines containing the text, see below.
 6. **Clear** (<kbd>Ctrl</kbd>+<kbd>L</kbd>) – empties the monitor.
 7. **Show / hide the quick commands** – more room for the output.
@@ -270,6 +276,40 @@ telegram of the binary simulator is one entry, with offset, hex values and ASCII
 2. The counter shows how many of all lines match.
 
 The filter only hides lines; nothing is deleted and the export still contains everything.
+
+#### Colours of device consoles
+
+![Monitor with the coloured log of a device console](docs/images/guide/monitor-ansi.png)
+
+Many firmware consoles colour their output with ANSI escape sequences – ESP-IDF prints information
+in green, warnings in yellow and errors in red; Zephyr, U-Boot and Linux do the same. With
+**Colours** (1) ticked (the default), the monitor shows these colours and removes every other escape
+sequence (cursor movement, erasing a line, window titles), so the output (2) stays readable instead
+of showing `[0;32m` fragments. The colours follow the light or dark appearance.
+
+- Every line starts in the default colour – consoles end a coloured line with a reset anyway.
+- Filter, export, CSV and log file contain the plain text without escape sequences.
+- While a filter is active, the matches are highlighted instead of the colours.
+- Untick **Colours** to see the escape sequences themselves (the escape character appears as `.`).
+
+#### Terminal view
+
+![Monitor as an interactive terminal](docs/images/guide/terminal.png)
+
+For interactive consoles (a shell on an ESP32, Zephyr or a Linux board, a bootloader prompt) the
+monitor can be switched from **Lines** to **Terminal** (1). The output (2) is then a real VT terminal:
+colours, cursor movement, erased lines and progress bars appear as on the device.
+
+- Click into the terminal and type: **every key goes to the device at once** – letters, Enter,
+  Backspace, Tab, the arrow keys, <kbd>Ctrl</kbd>+<kbd>C</kbd> and so on. Pasted text is sent as it is.
+- **Enter sends** (3) – CR (default, most consoles), LF (e.g. Arduino sketches reading up to `\n`) or
+  CR LF.
+- **Local echo** (4) – shows what you type yourself, for devices that do not echo it.
+- A line feed without carriage return starts the next line at the left edge – many devices end
+  their lines with LF only.
+- The send field below keeps working, so stored commands and CRC frames can still be sent.
+- Everything received is also kept in the line view – switch back to **Lines** for timestamps,
+  formats, the filter or an export. The terminal shows what arrived so far when it is opened.
 
 ### 3. Presets / Sequences – stored commands
 
@@ -781,6 +821,9 @@ chosen folders are not affected.
 | `sim:frames`     | Binary telegrams `AA 55` + length + 3 bytes + CRC-8 every 400 ms – **every 7th telegram has a wrong checksum** on purpose, to see the frame parser report it.                                                                                                   |
 | `sim:testdevice` | The long-run test device (protocol SMP-TD/1), exactly like the test firmware of [hardware/](hardware/README.md): answers `PING`, `ECHO`, `STAT?`, checks CRC frames `AA 55 …` and streams sensor, NMEA and Modbus data on command.                              |
 
+Loaded session captures appear as further simulated ports `sim:replay-1`, `sim:replay-2` … – see
+[Session capture and replay](#session-capture-and-replay).
+
 To try the Modbus decoder: connect `sim:modbus`, switch the protocol decoder to live, set the monitor
 send format to HEX and the line end to _none_ (an appended `0A` would break the checksum) and send
 `01 03 00 00 00 0A C5 CD` – request and response are decoded.
@@ -808,6 +851,55 @@ send format to HEX and the line end to _none_ (an appended `0A` would break the 
 - **Former Python version** – on the first start its settings, presets and sequences are taken over
   automatically, if present – including the CRC, header/footer and periodic settings of the
   CustomTkinter version (`serial_monitor_settings.json`).
+
+### Session capture and replay
+
+![Capture switched on in the monitor](docs/images/guide/capture.png)
+
+A **session capture** records every byte of the monitor connection – received and sent, with the
+exact time and direction, plus opening and closing the port, DTR/RTS changes and break signals. It
+is the tool for "it only happens at the customer's site": record the session there, replay it at
+your desk.
+
+1. Tick **Capture** in the monitor (or **File → Session capture on/off**,
+   <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>) and choose a file name (`.smpcap`, in the log
+   folder by default). Capturing can start before connecting; it continues across disconnects and
+   automatic reconnects.
+2. The status bar shows the file. Untick **Capture** to finish – the status bar then shows the
+   duration and the bytes in each direction.
+
+Unlike _Log → file_, the capture keeps the raw bytes (binary data, line ends, escape sequences) and
+the timing, not the formatted lines. The file is plain text (JSON Lines: one event per line), so it
+stays readable, can be compared with a diff tool, and a capture that was cut off – the computer
+switched off, the disk full – is still usable up to the last complete line. The format is documented
+in [src/shared/core/capture.ts](src/shared/core/capture.ts). It contains the port name; remove the
+`path` entries before sharing a capture if that matters.
+
+![Replay dialog with two loaded captures](docs/images/guide/replay.png)
+
+**File → Replay a capture…** turns a capture into a simulated device:
+
+1. **Behaviour:**
+   - **Answer like the device** – whenever the application sends what was sent in the capture, the
+     recorded answer follows, with the recorded delay. Requests in a different order are found again
+     in the capture, so a polling application keeps getting answers. For devices that answer
+     requests (Modbus, AT commands, test protocols).
+   - **Play back in time** – everything the device sent, on its original timeline; what the
+     application sends is ignored. For streams, logs and boot messages. **Start again at the end**
+     repeats it.
+2. **Speed** – 0.25× to 10× of the recorded timing.
+3. **Load capture…** – the capture becomes the port `sim:replay-<n>`, which is selected in the
+   monitor right away. It works with every tool – decoder, graph, frame parser, multi-port,
+   automation.
+4. **Loaded captures** – size and duration of each one; behaviour and speed can be changed (they
+   apply the next time the port is opened). **Remove** closes the port and takes it out of the list.
+
+Loaded captures are listed even when the simulated devices are switched off in the settings, and
+stay available until the application is closed.
+
+The automated tests of Serial Monitor Pro use the same mechanism: sessions recorded from real
+boards (`tests/fixtures/captures/`) are replayed in every build and checked by the application's own
+decoders.
 
 ### Flow control and control lines
 

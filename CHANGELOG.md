@@ -6,6 +6,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.4.0] – 2026-11-01
+
+### Added
+
+- **Session capture**: _Capture_ in the monitor (or _File → Session capture on/off_,
+  Ctrl+Shift+R) records every byte of the connection with direction and time, plus opening,
+  closing, DTR/RTS and break, in a `.smpcap` file (JSON Lines, readable and diffable, usable even
+  when cut off). It continues across disconnects and automatic reconnects.
+- **Replay of captures**: _File → Replay a capture…_ turns a capture into the simulated port
+  `sim:replay-<n>` – it answers like the recorded device (recorded answers with their delays, also
+  for requests in a different order) or plays everything back in time, at 0.25× to 10× speed.
+- **Terminal view**: the monitor can be switched from _Lines_ to _Terminal_ – a real VT terminal
+  (xterm.js) for device consoles with colours, cursor movement and progress bars; every key goes to
+  the device at once, Enter sends CR, LF or CR LF, optional local echo.
+- **ANSI colours** in the line view: colours of ESP-IDF, Zephyr, U-Boot and Linux consoles are
+  shown (theme-aware), other escape sequences are hidden; filter, export and log keep plain text.
+- **Replay tests with real boards**: sessions recorded from the Uno, Mega 2560, Nano ESP32,
+  ESP32-WROOM and an RS232 loopback adapter are replayed in every build – the decoders must accept
+  the real firmware output and every replay must give exactly the recorded answers.
+- **GUI long-run test with the multi-port bridge**: a loopback adapter (after a probe) receives the
+  stream of another board through the bridge; every byte must come back. The test now also records
+  the JavaScript heap and the DOM nodes per tab, and can profile the window's CPU time.
+
+### Fixed
+
+- **The window stopped reacting during long recordings under load.** The outputs of multi-port,
+  automation, stop condition and frame parser scrolled after every single line, forcing a layout of
+  the whole output each time; with several busy ports the window used about half of its time for
+  that, grew beyond 1 GB and froze after a few minutes. They now scroll at most once per frame and
+  keep their lines in blocks that the browser skips while out of view (as the monitor already did).
+  Measured with four boards and the bridge: the window stays around 380 MB and is idle most of the
+  time.
+
+### Tests
+
+- Unit tests for the capture format, the replay player, the ANSI parser and the terminal keys;
+  an integration test that records a session through the serial layer and replays it byte for byte;
+  Electron tests for capture and replay in the user interface, the terminal view and the colours.
+- Measured on the boards: GUI long-run test with four boards and the RS232 bridge for 20 minutes.
+
 ## [1.3.1] – 2026-11-01
 
 ### Added

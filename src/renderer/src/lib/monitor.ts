@@ -4,6 +4,7 @@
 // filter …) are applied while rendering, so switching from ASCII to HEX
 // re-renders everything that has already been received.
 
+import { hasAnsi, parseAnsi, type AnsiSegment } from '@shared/core/ansi';
 import { formatBytes, formatText, hexdump, type DataFormat } from '@shared/core/format';
 import { formatTimestamp, type TimestampFormat } from '@shared/core/timestamp';
 import { toHexString, decodeUtf8 } from '@shared/core/bytes';
@@ -30,6 +31,7 @@ export interface RenderOptions {
   display: DataFormat;
   utf8: boolean;
   showCrlf: boolean;
+  ansi: boolean;
   hexdump: boolean;
   timestamp: boolean;
   timestampFormat: TimestampFormat;
@@ -40,7 +42,10 @@ export interface RenderedLine {
   ts: string;
   dt: string;
   dir: string;
+  /** Plain text (export, filter, file log) – without escape sequences. */
   text: string;
+  /** Coloured parts of `text` when the line had ANSI colours. */
+  segments?: AnsiSegment[];
 }
 
 const MARKERS: Record<EntryKind, string> = { rx: '←', tx: '→', sys: '•', err: '✕', ok: '✓' };
@@ -48,7 +53,7 @@ const MARKERS: Record<EntryKind, string> = { rx: '←', tx: '→', sys: '•', e
 function renderData(raw: Uint8Array, fmt: DataFormat, o: RenderOptions, dump: boolean): string {
   if (dump) return hexdump(raw);
   if (fmt !== 'ASCII') return formatBytes(raw, fmt);
-  let text = formatText(raw, o.utf8);
+  let text = formatText(raw, o.utf8, o.ansi && !o.showCrlf);
   if (o.showCrlf) return text.replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
   // The line break that ended the line is implied by the layout.
   text = text.replace(/(\r\n|\n|\r)$/, '');
@@ -64,6 +69,11 @@ export function renderEntry(e: Entry, o: RenderOptions): RenderedLine {
   let text: string;
   if (e.raw && e.kind === 'rx') {
     text = renderData(e.raw, o.display, o, o.hexdump);
+    if (o.ansi && hasAnsi(text)) {
+      const segments = parseAnsi(text);
+      const plain = segments.map((s) => s.text).join('');
+      return { ts, dt, dir: MARKERS[e.kind], text: plain, segments };
+    }
   } else if (e.raw && e.kind === 'tx') {
     const data = renderData(e.raw, e.fmt ?? o.display, o, false);
     text = e.label ? `[${e.label}] ${data}` : data;

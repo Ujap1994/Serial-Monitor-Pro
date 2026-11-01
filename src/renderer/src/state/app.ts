@@ -58,6 +58,8 @@ export interface AppState {
   periodic: string | null;
   /** Monitor display paused by a stop condition ("pause receiving"). */
   monitorPaused: boolean;
+  /** File of the running session capture, null when none is running. */
+  capturing: string | null;
 }
 
 export const appStore = createStore<AppState>({
@@ -78,6 +80,7 @@ export const appStore = createStore<AppState>({
   rxRate: 0,
   txRate: 0,
   status: { text: '', tone: 'info' },
+  capturing: null,
   tab: 'monitor',
   busyTabs: [],
   periodic: null,

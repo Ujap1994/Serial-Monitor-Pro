@@ -28,12 +28,18 @@ export function formatBytes(raw: Uint8Array, mode: DataFormat, utf8 = false): st
   }
 }
 
-/** ASCII rendering that keeps line breaks and tabs so text stays readable. */
-export function formatText(raw: Uint8Array, utf8: boolean): string {
+/**
+ * ASCII rendering that keeps line breaks and tabs so text stays readable –
+ * and the escape character when ANSI sequences are interpreted afterwards.
+ */
+export function formatText(raw: Uint8Array, utf8: boolean, keepEscape = false): string {
   if (utf8) return decodeUtf8(raw);
   let out = '';
   for (const b of raw) {
-    out += b === 0x0a || b === 0x0d || b === 0x09 ? String.fromCharCode(b) : printable(b);
+    out +=
+      b === 0x0a || b === 0x0d || b === 0x09 || (keepEscape && b === 0x1b)
+        ? String.fromCharCode(b)
+        : printable(b);
   }
   return out;
 }

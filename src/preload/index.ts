@@ -41,6 +41,16 @@ const api: SmpApi = {
     write: (text) => ipcRenderer.send(IPC.logWrite, text),
     stop: () => ipcRenderer.invoke(IPC.logStop),
   },
+  capture: {
+    start: (id, defaultName) => ipcRenderer.invoke(IPC.captureStart, id, defaultName),
+    stop: () => ipcRenderer.invoke(IPC.captureStop),
+  },
+  replay: {
+    load: (options) => ipcRenderer.invoke(IPC.replayLoad, options),
+    list: () => ipcRenderer.invoke(IPC.replayList),
+    remove: (path) => ipcRenderer.invoke(IPC.replayRemove, path),
+    configure: (path, options) => ipcRenderer.invoke(IPC.replayConfigure, path, options),
+  },
   app: {
     setPaths: (folders) => ipcRenderer.invoke(IPC.appSetPaths, folders),
     onCloseRequested: (listener) => subscribe<void>(IPC.appCloseRequested, listener),

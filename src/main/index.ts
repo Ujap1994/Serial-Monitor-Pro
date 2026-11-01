@@ -11,6 +11,8 @@ import {
   IPC,
   type AppInfo,
   type BinaryFile,
+  type CaptureStats,
+  type ReplayInfo,
   type ControlLines,
   type FileFilter,
   type FolderSettings,
@@ -23,11 +25,21 @@ import {
 } from '@shared/ipc';
 import type { Theme } from '@shared/core/settings';
 import { newerReleases, parseReleases } from '@shared/core/updates';
+import { CAPTURE_EXTENSION, CaptureError, parseCapture } from '@shared/core/capture';
+import { normalizeReplayOptions, type ReplayOptions } from '@shared/core/replay';
 import icon from '../../resources/icon.png?asset';
 import { APP_NAME, REPOSITORY_URL } from './constants';
 import { buildMenu } from './menu';
+import { CaptureWriter } from './capture';
 import { listPorts, SerialManager } from './serial';
-import { simulatedPorts } from './simulator';
+import {
+  addReplay,
+  configureReplay,
+  removeReplay,
+  replayList,
+  replayPorts,
+  simulatedPorts,
+} from './simulator';
 import { isUsableFolder, Storage } from './storage';
 import { fetchNewerReleases } from './updates';
 import { loadWindowState, trackWindowState } from './window-state';
@@ -48,6 +60,9 @@ const STORES: StoreName[] = ['settings', 'commands', 'automation'];
 let mainWindow: BrowserWindow | null = null;
 let language: Language = 'en';
 let logStream: WriteStream | null = null;
+let capture: { id: string; writer: CaptureWriter } | null = null;
+/** Largest capture that is loaded for a replay. */
+const MAX_REPLAY_BYTES = 200 * 1024 * 1024;
 let quitting = false;
 let shutdownFinished = false;
 let closeRequested = false;
@@ -155,9 +170,12 @@ function registerIpc(): void {
   ipcMain.on(IPC.appCloseReady, (event) => {
     if (closeRequested && mainWindow?.webContents === event.sender) mainWindow.destroy();
   });
-  ipcMain.handle(IPC.serialList, (_e, includeSimulated: boolean) =>
-    simulatedOnly ? simulatedPorts() : listPorts(Boolean(includeSimulated) || simulatorForced),
-  );
+  ipcMain.handle(IPC.serialList, async (_e, includeSimulated: boolean) => [
+    ...(simulatedOnly
+      ? simulatedPorts()
+      : await listPorts(Boolean(includeSimulated) || simulatorForced)),
+    ...replayPorts(),
+  ]);
   ipcMain.handle(IPC.serialOpen, (_e, id: string, options: OpenOptions) =>
     quitting
       ? { ok: false, error: 'Application is closing', code: 'unknown' }
@@ -303,6 +321,73 @@ function registerIpc(): void {
   });
   ipcMain.handle(IPC.logStop, () => finishLog());
 
+  // Session capture: every byte of one connection, with direction and time.
+  ipcMain.handle(IPC.captureStart, async (_e, id: string, defaultName: string) => {
+    if (!mainWindow || quitting) return null;
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: join(
+        logFolder(),
+        basename(String(defaultName || `capture.${CAPTURE_EXTENSION}`)),
+      ),
+      filters: [{ name: t('capture.fileType'), extensions: [CAPTURE_EXTENSION] }],
+    });
+    if (result.canceled || !result.filePath || quitting) return null;
+    await finishCapture();
+    const writer = new CaptureWriter(
+      result.filePath,
+      app.getVersion(),
+      serial.optionsOf(String(id)),
+    );
+    capture = { id: String(id), writer };
+    serial.setTap(capture.id, (event) => writer.record(event));
+    return result.filePath;
+  });
+  ipcMain.handle(IPC.captureStop, () => finishCapture());
+
+  // A capture as a simulated device.
+  ipcMain.handle(
+    IPC.replayLoad,
+    async (_e, options: ReplayOptions): Promise<ValueResult<ReplayInfo> | null> => {
+      if (!mainWindow) return null;
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openFile'],
+        filters: [
+          { name: t('capture.fileType'), extensions: [CAPTURE_EXTENSION, 'jsonl'] },
+          { name: t('capture.allFiles'), extensions: ['*'] },
+        ],
+      });
+      const path = result.filePaths[0];
+      if (result.canceled || !path) return null;
+      try {
+        const { size } = await stat(path);
+        if (size > MAX_REPLAY_BYTES)
+          return {
+            ok: false,
+            error: t('replay.tooLarge', { size, max: MAX_REPLAY_BYTES }),
+            code: 'unknown',
+          };
+        const parsed = parseCapture(await readFile(path, 'utf8'));
+        return {
+          ok: true,
+          value: addReplay(basename(path), parsed, normalizeReplayOptions(options)),
+        };
+      } catch (err) {
+        const message =
+          err instanceof CaptureError || err instanceof Error ? err.message : String(err);
+        return { ok: false, error: message, code: 'unknown' };
+      }
+    },
+  );
+  ipcMain.handle(IPC.replayList, () => replayList());
+  ipcMain.handle(IPC.replayRemove, async (_e, path: string) => {
+    // A replay that is in use is closed first.
+    await serial.closePath(String(path));
+    removeReplay(String(path));
+  });
+  ipcMain.handle(IPC.replayConfigure, (_e, path: string, options: ReplayOptions) =>
+    configureReplay(String(path), normalizeReplayOptions(options)),
+  );
+
   ipcMain.handle(IPC.appInfo, (): AppInfo => {
     return {
       name: APP_NAME,
@@ -386,6 +471,14 @@ app.on('window-all-closed', () => {
   shutdown();
 });
 
+async function finishCapture(): Promise<CaptureStats | null> {
+  const current = capture;
+  capture = null;
+  if (!current) return null;
+  serial.setTap(current.id, null);
+  return current.writer.finish();
+}
+
 async function finishLog(): Promise<void> {
   const stream = logStream;
   logStream = null;
@@ -412,13 +505,15 @@ function shutdown(): void {
   if (shutdownStarted) return;
   shutdownStarted = true;
   quitting = true;
-  void Promise.allSettled([serial.closeAll(), finishLog(), ...pendingSaves]).then((results) => {
-    for (const result of results) {
-      if (result.status === 'rejected') console.warn('[shutdown] cleanup failed:', result.reason);
-    }
-    shutdownFinished = true;
-    app.quit();
-  });
+  void Promise.allSettled([serial.closeAll(), finishLog(), finishCapture(), ...pendingSaves]).then(
+    (results) => {
+      for (const result of results) {
+        if (result.status === 'rejected') console.warn('[shutdown] cleanup failed:', result.reason);
+      }
+      shutdownFinished = true;
+      app.quit();
+    },
+  );
 }
 
 app.on('before-quit', (event) => {

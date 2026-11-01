@@ -1,6 +1,8 @@
 // Contract between the main process and the renderer.
 // The preload script exposes exactly this API as `window.smp`.
 
+import type { CapturePort, CaptureSummary } from './core/capture';
+import type { ReplayOptions } from './core/replay';
 import type { DataBits, FlowControl, Parity, StopBits, Theme } from './core/settings';
 import type { Language } from './i18n';
 
@@ -59,6 +61,28 @@ export interface Chunk {
 export type SerialEvent =
   | { kind: 'data'; id: string; chunks: Chunk[] }
   | { kind: 'closed'; id: string; path: string; lost: boolean; error?: string };
+
+/** Result of a session capture. */
+export interface CaptureStats {
+  path: string;
+  durationMs: number;
+  rxBytes: number;
+  txBytes: number;
+  events: number;
+  /** Set when the file could not be written completely. */
+  error: string | null;
+}
+
+/** A capture loaded as a simulated device. */
+export interface ReplayInfo {
+  /** Port path of the simulated device, e.g. "sim:replay-1". */
+  path: string;
+  /** File name of the capture. */
+  name: string;
+  options: ReplayOptions;
+  summary: CaptureSummary;
+  port?: CapturePort;
+}
 
 export type StoreName = 'settings' | 'commands' | 'automation';
 
@@ -134,6 +158,8 @@ export type MenuAction =
   | 'export-commands'
   | 'check-updates'
   | 'send-file'
+  | 'capture'
+  | 'replay'
   | `theme:${Theme}`;
 
 export interface SmpApi {
@@ -171,6 +197,18 @@ export interface SmpApi {
     start(defaultName: string): Promise<string | null>;
     write(text: string): void;
     stop(): Promise<void>;
+  };
+  capture: {
+    /** Save dialog, then records everything of connection `id`; null when cancelled. */
+    start(id: string, defaultName: string): Promise<string | null>;
+    stop(): Promise<CaptureStats | null>;
+  };
+  replay: {
+    /** Open dialog for a capture; it becomes a simulated device. null when cancelled. */
+    load(options: ReplayOptions): Promise<ValueResult<ReplayInfo> | null>;
+    list(): Promise<ReplayInfo[]>;
+    remove(path: string): Promise<void>;
+    configure(path: string, options: ReplayOptions): Promise<ReplayInfo | null>;
   };
   app: {
     /**
@@ -211,6 +249,12 @@ export const IPC = {
   logStart: 'log:start',
   logWrite: 'log:write',
   logStop: 'log:stop',
+  captureStart: 'capture:start',
+  captureStop: 'capture:stop',
+  replayLoad: 'replay:load',
+  replayList: 'replay:list',
+  replayRemove: 'replay:remove',
+  replayConfigure: 'replay:configure',
   appInfo: 'app:info',
   appTheme: 'app:theme',
   appLanguage: 'app:language',

@@ -3,6 +3,7 @@ import { ModalHost, Toasts } from './components/Modal';
 import { ConnectionBar, StatusBar, TabBar } from './components/Shell';
 import { AboutDialog } from './dialogs/AboutDialog';
 import { BaudScanDialog } from './dialogs/BaudScanDialog';
+import { ReplayDialog } from './dialogs/ReplayDialog';
 import { SendFileDialog } from './dialogs/SendFileDialog';
 import { SettingsDialog } from './dialogs/SettingsDialog';
 import { ShortcutsDialog } from './dialogs/ShortcutsDialog';
@@ -21,7 +22,7 @@ import { StopPage } from './pages/StopPage';
 import { appStore, setTab, TABS, updateSettings, type TabId } from './state/app';
 import { exportCommands, importCommands } from './state/commands';
 import { exportCsv, exportText } from './state/export';
-import { clearMonitor, refreshPorts, toggleConnection } from './state/serial';
+import { clearMonitor, refreshPorts, toggleCapture, toggleConnection } from './state/serial';
 import { openDialog, uiStore } from './state/ui';
 import { checkForUpdates } from './state/updates';
 
@@ -66,6 +67,10 @@ function runMenuAction(action: string): void {
       return;
     case 'send-file':
       return openDialog('sendfile');
+    case 'capture':
+      return void toggleCapture();
+    case 'replay':
+      return openDialog('replay');
     case 'check-updates':
       return void checkForUpdates(true);
     default:
@@ -117,6 +122,8 @@ function GlobalDialogs(): ReactNode {
       return <SendFileDialog onClose={close} />;
     case 'update':
       return <UpdateDialog onClose={close} />;
+    case 'replay':
+      return <ReplayDialog onClose={close} />;
     case null:
       return null;
   }

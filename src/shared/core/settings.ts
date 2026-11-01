@@ -9,6 +9,7 @@ import {
   type Trigger,
 } from './automation';
 import { isNewline, type Newline } from './newline';
+import { TERMINAL_ENTER, type TerminalEnter } from './terminal';
 import { CRC_NAMES } from './crc';
 import type { FileSendMode } from './filesend';
 import { isDataFormat, type DataFormat } from './format';
@@ -37,6 +38,7 @@ export type StopBits = (typeof STOP_BITS)[number];
 export type FlowControl = (typeof FLOW_CONTROLS)[number];
 export type Theme = 'system' | 'light' | 'dark';
 export type RxSplit = 'newline' | 'packet';
+export type MonitorView = 'lines' | 'terminal';
 
 export interface FrameConfig {
   header: string;
@@ -84,6 +86,13 @@ export interface Settings {
   autoscroll: boolean;
   utf8: boolean;
   showCrlf: boolean;
+  /** Show ANSI colours of consoles (ESP-IDF, Zephyr …) and hide other escape sequences. */
+  ansi: boolean;
+  /** Monitor as lines (with timestamps, formats …) or as an interactive terminal. */
+  monitorView: MonitorView;
+  /** Terminal: what Enter sends, and whether typed characters are shown locally. */
+  terminalEnter: TerminalEnter;
+  terminalEcho: boolean;
   deltaTime: boolean;
   hexdump: boolean;
   rxSplit: RxSplit;
@@ -138,6 +147,10 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
   autoscroll: true,
   utf8: false,
   showCrlf: false,
+  ansi: true,
+  monitorView: 'lines',
+  terminalEnter: 'CR',
+  terminalEcho: false,
   deltaTime: false,
   hexdump: false,
   rxSplit: 'newline',
@@ -214,6 +227,10 @@ export function normalizeSettings(raw: unknown): Settings {
     autoscroll: bool(s.autoscroll, D.autoscroll),
     utf8: bool(s.utf8, D.utf8),
     showCrlf: bool(s.showCrlf, D.showCrlf),
+    ansi: bool(s.ansi, D.ansi),
+    monitorView: oneOf(['lines', 'terminal'] as const, s.monitorView, D.monitorView),
+    terminalEnter: oneOf(TERMINAL_ENTER, s.terminalEnter, D.terminalEnter),
+    terminalEcho: bool(s.terminalEcho, D.terminalEcho),
     deltaTime: bool(s.deltaTime, D.deltaTime),
     hexdump: bool(s.hexdump, D.hexdump),
     rxSplit: oneOf(['newline', 'packet'] as const, s.rxSplit, D.rxSplit),

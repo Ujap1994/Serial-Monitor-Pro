@@ -11,6 +11,9 @@ import { calculateCrc } from '@shared/core/crc';
 import { buildModbusFrame } from '@shared/core/modbus';
 import { withNmeaChecksum } from '@shared/core/nmea';
 import { TestDeviceCore } from '@shared/core/testdevice';
+import { captureSummary, type Capture } from '@shared/core/capture';
+import { normalizeReplayOptions, ReplayPlayer, type ReplayOptions } from '@shared/core/replay';
+import type { ReplayInfo } from '@shared/ipc';
 
 export const SIM_PREFIX = 'sim:';
 
@@ -25,6 +28,60 @@ export const SENSOR_BAUD = 9600;
 
 export function isSimulatedPath(path: string): boolean {
   return path.startsWith(SIM_PREFIX);
+}
+
+// ── Captures replayed as devices ─────────────────────────────────────────────
+
+interface LoadedReplay {
+  name: string;
+  capture: Capture;
+  options: ReplayOptions;
+}
+const replays = new Map<string, LoadedReplay>();
+let replayCount = 0;
+
+function replayInfo(path: string, r: LoadedReplay): ReplayInfo {
+  return {
+    path,
+    name: r.name,
+    options: r.options,
+    summary: captureSummary(r.capture.events),
+    ...(r.capture.header.port ? { port: r.capture.header.port } : {}),
+  };
+}
+
+/** Makes a capture available as the simulated port "sim:replay-<n>". */
+export function addReplay(name: string, capture: Capture, options: ReplayOptions): ReplayInfo {
+  const path = `${SIM_PREFIX}replay-${++replayCount}`;
+  const loaded = { name, capture, options: normalizeReplayOptions(options) };
+  replays.set(path, loaded);
+  return replayInfo(path, loaded);
+}
+
+export function removeReplay(path: string): void {
+  replays.delete(path);
+}
+
+/** New options apply the next time the port is opened. */
+export function configureReplay(path: string, options: ReplayOptions): ReplayInfo | null {
+  const loaded = replays.get(path);
+  if (!loaded) return null;
+  loaded.options = normalizeReplayOptions(options);
+  return replayInfo(path, loaded);
+}
+
+export function replayList(): ReplayInfo[] {
+  return [...replays].map(([path, r]) => replayInfo(path, r));
+}
+
+/** Loaded captures are listed even with the simulator off – the user added them. */
+export function replayPorts(): PortInfo[] {
+  return [...replays].map(([path, r]) => ({
+    path,
+    description: t('sim.replay', { name: r.name }),
+    manufacturer: 'Serial Monitor Pro',
+    simulated: true,
+  }));
 }
 
 export function simulatedPorts(): PortInfo[] {
@@ -60,7 +117,8 @@ export class SimulatedDevice {
   private tick = 0;
   private closed = false;
   private testDevice: TestDeviceCore | null = null;
-  readonly kind: DeviceKind;
+  private replay: ReplayPlayer | null = null;
+  readonly kind: DeviceKind | 'replay';
 
   constructor(
     path: string,
@@ -68,6 +126,17 @@ export class SimulatedDevice {
     private readonly cb: SimCallbacks,
   ) {
     const kind = path.slice(SIM_PREFIX.length);
+    const loaded = replays.get(path);
+    if (loaded) {
+      this.kind = 'replay';
+      this.replay = new ReplayPlayer(loaded.capture.events, loaded.options, {
+        emit: (data) => this.emit(data),
+        schedule: (ms, fn) => this.later(ms, fn),
+        now: () => performance.now(),
+      });
+      this.replay.start();
+      return;
+    }
     if (!(DEVICES as readonly string[]).includes(kind)) {
       throw new Error(`No such file or directory, cannot open ${path}`);
     }
@@ -94,6 +163,9 @@ export class SimulatedDevice {
 
   private start(): void {
     switch (this.kind) {
+      case 'replay':
+        // driven by its ReplayPlayer
+        break;
       case 'sensor':
         this.every(250, () => this.sensorTick());
         break;
@@ -204,6 +276,9 @@ export class SimulatedDevice {
   write(data: Uint8Array): void {
     if (this.closed) return;
     switch (this.kind) {
+      case 'replay':
+        this.replay?.write(data.slice());
+        break;
       case 'loopback':
         this.later(3, () => this.emit(data.slice()));
         break;
@@ -285,6 +360,7 @@ export class SimulatedDevice {
 
   close(): void {
     this.closed = true;
+    this.replay?.stop();
     for (const timer of this.timers) clearInterval(timer);
     for (const handle of this.timeouts) clearTimeout(handle);
     if (this.modbusTimer) clearTimeout(this.modbusTimer);

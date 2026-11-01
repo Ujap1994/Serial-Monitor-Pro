@@ -6,6 +6,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Repeat,
+  Rows3,
   Search,
   SendHorizontal,
   ShieldCheck,
@@ -14,11 +15,17 @@ import {
 } from 'lucide-react';
 import { NEWLINES, type Newline } from '@shared/core/commands';
 import { DATA_FORMATS, formatHexInput, type DataFormat } from '@shared/core/format';
-import { PERIODIC_MAX_MS, PERIODIC_MIN_MS } from '@shared/core/settings';
+import {
+  PERIODIC_MAX_MS,
+  PERIODIC_MIN_MS,
+  type MonitorView as MonitorViewMode,
+} from '@shared/core/settings';
+import type { TerminalEnter } from '@shared/core/terminal';
 import { monitorPacket, monitorSendBytes, type TransmitCrcConfig } from '@shared/core/transmit-crc';
 import { MonitorView } from '../components/LogView';
+import { TerminalView } from '../components/TerminalView';
 import { PacketPreview } from '../components/PacketPreview';
-import { Button, Card, Check, Input, NumberInput, Select } from '../components/ui';
+import { Button, Card, Check, Input, NumberInput, Segmented, Select } from '../components/ui';
 import { useHexChange } from '../components/useHexChange';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
@@ -35,6 +42,7 @@ import {
   startPeriodic,
   stopFileLog,
   stopPeriodic,
+  toggleCapture,
 } from '../state/serial';
 
 /** Focus target for Ctrl+F. */
@@ -91,6 +99,7 @@ function DisplayOptions({ shown, total, filter, setFilter }: DisplayOptionsProps
   const t = useT();
   const s = useStore(appStore, (st) => st.settings);
   const [logging, setLogging] = useState(false);
+  const capturing = useStore(appStore, (st) => st.capturing);
 
   return (
     <div className="opts">
@@ -105,49 +114,93 @@ function DisplayOptions({ shown, total, filter, setFilter }: DisplayOptionsProps
       >
         {t('quick.title')}
       </Button>
-      <span className="toolbar-label">{t('monitor.display')}</span>
-      <Select<DataFormat>
-        value={s.display}
-        options={DATA_FORMATS}
-        onChange={(display) => updateSettings({ display })}
-        data-testid="display-format"
-        style={{ width: 86 }}
+      <Segmented<MonitorViewMode>
+        value={s.monitorView}
+        options={[
+          { value: 'lines', label: t('monitor.viewLines'), icon: Rows3 },
+          { value: 'terminal', label: t('monitor.viewTerminal'), icon: SquareTerminal },
+        ]}
+        onChange={(monitorView) => updateSettings({ monitorView })}
+        testId="monitor-view"
       />
-      <Check checked={s.timestamp} onChange={(timestamp) => updateSettings({ timestamp })}>
-        {t('monitor.timestamp')}
-      </Check>
-      <Check
-        checked={s.deltaTime}
-        onChange={(deltaTime) => updateSettings({ deltaTime })}
-        title={t('monitor.deltaTip')}
-      >
-        Δt
-      </Check>
-      <Check checked={s.autoscroll} onChange={(autoscroll) => updateSettings({ autoscroll })}>
-        {t('monitor.autoscroll')}
-      </Check>
-      <Check
-        checked={s.utf8}
-        onChange={(utf8) => updateSettings({ utf8 })}
-        title={t('monitor.utf8Tip')}
-      >
-        UTF-8
-      </Check>
-      <Check
-        checked={s.showCrlf}
-        onChange={(showCrlf) => updateSettings({ showCrlf })}
-        title={t('monitor.crlfTip')}
-      >
-        \r\n
-      </Check>
-      <Check
-        checked={s.hexdump}
-        onChange={(hexdump) => updateSettings({ hexdump })}
-        title={t('monitor.hexdumpTip')}
-        testId="hexdump-toggle"
-      >
-        {t('monitor.hexdump')}
-      </Check>
+      {s.monitorView === 'terminal' ? (
+        <>
+          <span className="toolbar-label">{t('terminal.enter')}</span>
+          <Select<TerminalEnter>
+            value={s.terminalEnter}
+            options={[
+              { value: 'CR', label: 'CR' },
+              { value: 'LF', label: 'LF' },
+              { value: 'CRLF', label: 'CR LF' },
+            ]}
+            onChange={(terminalEnter) => updateSettings({ terminalEnter })}
+            data-testid="terminal-enter"
+            style={{ width: 86 }}
+          />
+          <Check
+            checked={s.terminalEcho}
+            onChange={(terminalEcho) => updateSettings({ terminalEcho })}
+            title={t('terminal.echoTip')}
+            testId="terminal-echo"
+          >
+            {t('terminal.echo')}
+          </Check>
+        </>
+      ) : (
+        <>
+          <span className="toolbar-label">{t('monitor.display')}</span>
+          <Select<DataFormat>
+            value={s.display}
+            options={DATA_FORMATS}
+            onChange={(display) => updateSettings({ display })}
+            data-testid="display-format"
+            style={{ width: 86 }}
+          />
+          <Check checked={s.timestamp} onChange={(timestamp) => updateSettings({ timestamp })}>
+            {t('monitor.timestamp')}
+          </Check>
+          <Check
+            checked={s.deltaTime}
+            onChange={(deltaTime) => updateSettings({ deltaTime })}
+            title={t('monitor.deltaTip')}
+          >
+            Δt
+          </Check>
+          <Check checked={s.autoscroll} onChange={(autoscroll) => updateSettings({ autoscroll })}>
+            {t('monitor.autoscroll')}
+          </Check>
+          <Check
+            checked={s.utf8}
+            onChange={(utf8) => updateSettings({ utf8 })}
+            title={t('monitor.utf8Tip')}
+          >
+            UTF-8
+          </Check>
+          <Check
+            checked={s.showCrlf}
+            onChange={(showCrlf) => updateSettings({ showCrlf })}
+            title={t('monitor.crlfTip')}
+          >
+            \r\n
+          </Check>
+          <Check
+            checked={s.ansi}
+            onChange={(ansi) => updateSettings({ ansi })}
+            title={t('monitor.ansiTip')}
+            testId="ansi-toggle"
+          >
+            {t('monitor.ansi')}
+          </Check>
+          <Check
+            checked={s.hexdump}
+            onChange={(hexdump) => updateSettings({ hexdump })}
+            title={t('monitor.hexdumpTip')}
+            testId="hexdump-toggle"
+          >
+            {t('monitor.hexdump')}
+          </Check>
+        </>
+      )}
       <Check
         checked={logging}
         title={t('monitor.fileLogTip')}
@@ -163,19 +216,29 @@ function DisplayOptions({ shown, total, filter, setFilter }: DisplayOptionsProps
       >
         {t('monitor.fileLog')}
       </Check>
+      <Check
+        checked={capturing !== null}
+        title={capturing ?? t('monitor.captureTip')}
+        onChange={() => void toggleCapture()}
+        testId="capture-toggle"
+      >
+        {t('monitor.capture')}
+      </Check>
       <div className="opts-end">
-        <div className="filter">
-          <Search size={14} strokeWidth={2.4} aria-hidden />
-          <Input
-            id={filterInputId}
-            data-testid="monitor-filter"
-            placeholder={t('monitor.filterPlaceholder')}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            onKeyDown={(e) => e.key === 'Escape' && setFilter('')}
-          />
-        </div>
-        {filter && (
+        {s.monitorView === 'lines' && (
+          <div className="filter">
+            <Search size={14} strokeWidth={2.4} aria-hidden />
+            <Input
+              id={filterInputId}
+              data-testid="monitor-filter"
+              placeholder={t('monitor.filterPlaceholder')}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => e.key === 'Escape' && setFilter('')}
+            />
+          </div>
+        )}
+        {s.monitorView === 'lines' && filter && (
           <span className="filter-count" data-testid="filter-count">
             {t('monitor.filterCount', { shown, total })}
           </span>
@@ -451,32 +514,36 @@ export function MonitorPage(): ReactNode {
   const options = useMemo(
     () => renderOptions(),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- renderOptions reads exactly these settings
-    [s.display, s.utf8, s.showCrlf, s.hexdump, s.timestamp, s.timestampFormat, s.deltaTime],
+    [s.display, s.utf8, s.showCrlf, s.ansi, s.hexdump, s.timestamp, s.timestampFormat, s.deltaTime],
   );
 
   return (
     <div className={s.quickPanel ? 'monitor' : 'monitor no-panel'}>
       {s.quickPanel && <QuickPanel />}
       <div className="monitor-main">
-        <MonitorView
-          model={monitor}
-          options={options}
-          filter={filter}
-          autoscroll={s.autoscroll}
-          emptyIcon={SquareTerminal}
-          empty={
-            <>
-              <b>{t('monitor.emptyTitle')}</b>
-              <br />
-              {t('monitor.emptyText')}
-            </>
-          }
-          onStats={(shown, total) =>
-            setStats((prev) =>
-              prev.shown === shown && prev.total === total ? prev : { shown, total },
-            )
-          }
-        />
+        {s.monitorView === 'terminal' ? (
+          <TerminalView />
+        ) : (
+          <MonitorView
+            model={monitor}
+            options={options}
+            filter={filter}
+            autoscroll={s.autoscroll}
+            emptyIcon={SquareTerminal}
+            empty={
+              <>
+                <b>{t('monitor.emptyTitle')}</b>
+                <br />
+                {t('monitor.emptyText')}
+              </>
+            }
+            onStats={(shown, total) =>
+              setStats((prev) =>
+                prev.shown === shown && prev.total === total ? prev : { shown, total },
+              )
+            }
+          />
+        )}
         {paused && (
           <div className="notice row" data-testid="monitor-paused">
             <span className="grow">{t('monitor.pausedBanner')}</span>

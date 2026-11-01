@@ -2,7 +2,7 @@
 
 Serial Monitor Pro is open-source software and may contain errors or bugs. Tests reduce risk;
 they do not certify the application or a connected device. This document describes the state of
-version 1.3.0 (2026-11-01).
+version 1.4.0 (2026-11-01).
 
 ## Python-to-TypeScript parity
 
@@ -44,12 +44,18 @@ function of that edition and its state here.
 
 ## Recommended order of remaining work
 
-| Priority | Work                                 | Reason                                                                                                                                                                                                                          | Completion criterion                                                                                                                      |
-| -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 1        | Long-run and hardware acceptance     | The automated long-run test (`npm run longrun`, [LONG_RUN_TEST.md](LONG_RUN_TEST.md)) runs against Uno, Mega 2560, Nano ESP32 and ESP32-WROOM; first 3-minute runs passed. Long runs (overnight, weekend) are still to be done. | Overnight and weekend runs pass; findings are fixed and kept as replay tests.                                                             |
-| 2        | Raw capture and deterministic replay | TXT/CSV export and simulated tests exist; there is no timestamped binary session format and replay runner.                                                                                                                      | Versioned capture with exact bytes, direction and timing; anonymized hardware fixtures replayed in CI.                                    |
-| 3        | Small, headless CLI                  | See below.                                                                                                                                                                                                                      | Offline commands first, with a documented exit-code contract.                                                                             |
-| 4        | Distribution assurance               | Native runtime tests cover the host architecture; cross-built Windows ARM and Linux ARM archives do not all receive an install/run test. Signing/notarization credentials are absent.                                           | Real/native-VM smoke tests per supported package; optional signed Windows and notarized macOS distribution when credentials are supplied. |
+Done in 1.4.0: session capture with exact bytes, direction and timing; replay as a simulated device
+("answer" and "timed"); sessions recorded from the long-run boards replayed in CI; terminal view and
+ANSI colours for device consoles.
+
+| Priority | Work                             | Reason                                                                                                                                                                                                        | Completion criterion                                                                                                                      |
+| -------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | Long-run and hardware acceptance | The terminal and GUI long-run tests run against Uno, Mega 2560, Nano ESP32, ESP32-WROOM and an RS232 loopback; runs of up to 20 minutes passed. Overnight and weekend runs are still to be done by the owner. | Overnight and weekend runs pass; findings are fixed and kept as replay tests.                                                             |
+| 2        | Device profiles                  | Port (by USB serial number), line settings, DTR/RTS, CRC settings and commands per device, switched with one click; automatic connection when that device is plugged in.                                      | Profiles survive re-plugging with a new port name; E2E tests with the simulator.                                                          |
+| 3        | Network ports                    | TCP client/server, Telnet and RFC 2217 for serial-to-Ethernet converters (Moxa, ser2net) – common in industry.                                                                                                | Same tools on a network port; tests against a local server.                                                                               |
+| 4        | Logging for long recordings      | Log to file is one growing text file of the monitor. Rotation by size or day, HEX logging and logs of the multi-port slots are missing.                                                                       | Configurable rotation; long-run test writes logs for hours without growth of memory.                                                      |
+| 5        | Small, headless CLI              | See below.                                                                                                                                                                                                    | Offline commands first, with a documented exit-code contract.                                                                             |
+| 6        | Distribution assurance           | Native runtime tests cover the host architecture; cross-built Windows ARM and Linux ARM archives do not all receive an install/run test. Signing/notarization credentials are absent.                         | Real/native-VM smoke tests per supported package; optional signed Windows and notarized macOS distribution when credentials are supplied. |
 
 ## CLI recommendation
 
@@ -57,7 +63,7 @@ A command-line interface is **worth having, in a small form**. It is useful for 
 fixtures and scripted byte verification – for example to compute the exact CRC packet a test script
 must send, or to decode a captured telegram in a pipeline. It should be a small Node.js entry point
 that reuses `src/shared/core` (the same CRC, framing and decoder code the application uses), not a
-second implementation, and not a replacement for the desktop application. No general CLI is part of 1.3.0; `npm run longrun` and `npm run firmware` are development tools of the repository.
+second implementation, and not a replacement for the desktop application. No general CLI is part of 1.4.0; `npm run longrun` and `npm run firmware` are development tools of the repository.
 
 Suggested staged interface (design examples, **not available commands**):
 

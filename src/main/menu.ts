@@ -49,6 +49,9 @@ export function buildMenu(
       item(tr('menu.exportTxt'), 'export-txt', 'CmdOrCtrl+S'),
       item(tr('menu.exportCsv'), 'export-csv', 'CmdOrCtrl+Shift+S'),
       { type: 'separator' },
+      item(tr('menu.capture'), 'capture', 'CmdOrCtrl+Shift+R'),
+      item(tr('menu.replay'), 'replay'),
+      { type: 'separator' },
       item(tr('menu.importCommands'), 'import-commands'),
       item(tr('menu.exportCommands'), 'export-commands'),
       ...(isMac
