@@ -1,5 +1,7 @@
 # Long-run and acceptance test checklist
 
+Much of this checklist is automated by `npm run longrun` – see [LONG_RUN_TEST.md](LONG_RUN_TEST.md). The manual items remain for what a script cannot judge (electrical signals, usability).
+
 Serial Monitor Pro is open-source software and may contain errors or bugs. Run this checklist on a
 test setup before relying on it in a production measurement workflow. This document is a procedure;
 unchecked items are **not** evidence that a test has passed.

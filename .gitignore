@@ -35,3 +35,8 @@ Thumbs.db
 .env
 .env.*
 .claude/settings.local.json
+
+# Long-run test: devices of this computer and reports
+hardware/devices.local.json
+soak-reports/
+hardware/**/build/

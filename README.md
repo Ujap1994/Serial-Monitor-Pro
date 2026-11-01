@@ -751,7 +751,7 @@ Available while disconnected: click **Scan** in the toolbar or choose _Connectio
 |                  | Browse the history with ↑ ↓              | on              | The last 50 inputs.                                                                                            |
 |                  | Show sent data in the monitor            | on              | Sent data appears as `→` lines.                                                                                |
 | **5 Connection** | Reconnect automatically                  | off             | When a device disappears (unplugged, reset), the application waits and reconnects as soon as the port is back. |
-|                  | Show simulated test devices              | off             | Adds the five [simulated devices](#14-simulated-test-devices) to all port lists.                               |
+|                  | Show simulated test devices              | off             | Adds the six [simulated devices](#14-simulated-test-devices) to all port lists.                                |
 | _Storage_        | Folders                                  | default         | See below (scroll down in the dialog).                                                                         |
 
 **Reset to defaults** restores all settings; stored commands, sequences, triggers, schedules and the
@@ -772,13 +772,14 @@ chosen folders are not affected.
 
 ### 14. Simulated test devices
 
-| Port           | Behaves like                                                                                                                                                                                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sim:loopback` | A loopback plug – sends back everything it receives after 3 ms.                                                                                                                                                                                                 |
-| `sim:sensor`   | A sensor that sends `Temp:…, Humidity:…, Pressure:…` four times per second – readable **only at 9600 baud**, otherwise garbage. Answers `AT` → `OK`, `ATI` → name and `OK`, `AT+RST` → `READY`, anything else → `ERROR`.                                        |
-| `sim:modbus`   | A Modbus RTU slave with address 1 and 100 holding registers (register _n_ = 10·_n_, register 0 counts up every second). Answers functions 3, 4 (read up to 60 registers) and 6 (write), and exception responses for illegal functions, addresses or quantities. |
-| `sim:gps`      | A GPS receiver sending `$GPGGA` and `$GPRMC` sentences with checksums once per second, slowly moving.                                                                                                                                                           |
-| `sim:frames`   | Binary telegrams `AA 55` + length + 3 bytes + CRC-8 every 400 ms – **every 7th telegram has a wrong checksum** on purpose, to see the frame parser report it.                                                                                                   |
+| Port             | Behaves like                                                                                                                                                                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sim:loopback`   | A loopback plug – sends back everything it receives after 3 ms.                                                                                                                                                                                                 |
+| `sim:sensor`     | A sensor that sends `Temp:…, Humidity:…, Pressure:…` four times per second – readable **only at 9600 baud**, otherwise garbage. Answers `AT` → `OK`, `ATI` → name and `OK`, `AT+RST` → `READY`, anything else → `ERROR`.                                        |
+| `sim:modbus`     | A Modbus RTU slave with address 1 and 100 holding registers (register _n_ = 10·_n_, register 0 counts up every second). Answers functions 3, 4 (read up to 60 registers) and 6 (write), and exception responses for illegal functions, addresses or quantities. |
+| `sim:gps`        | A GPS receiver sending `$GPGGA` and `$GPRMC` sentences with checksums once per second, slowly moving.                                                                                                                                                           |
+| `sim:frames`     | Binary telegrams `AA 55` + length + 3 bytes + CRC-8 every 400 ms – **every 7th telegram has a wrong checksum** on purpose, to see the frame parser report it.                                                                                                   |
+| `sim:testdevice` | The long-run test device (protocol SMP-TD/1), exactly like the test firmware of [hardware/](hardware/README.md): answers `PING`, `ECHO`, `STAT?`, checks CRC frames `AA 55 …` and streams sensor, NMEA and Modbus data on command.                              |
 
 To try the Modbus decoder: connect `sim:modbus`, switch the protocol decoder to live, set the monitor
 send format to HEX and the line end to _none_ (an appended `0A` would break the checksum) and send
@@ -868,10 +869,13 @@ The picture uses a **fictional test release feed**, not real release promises.
    including intermediate versions. Pagination is followed; failed requests show an error
    instead of presenting partial notes as complete. Drafts and prereleases are excluded.
 3. **Open download page** opens GitHub Releases in the system browser. Installation remains
-   manual. **Later** closes the notice; **Skip this version** suppresses the automatic popup
-   for that version only. Manual checking and the status-bar update link remain available.
+   manual. **Later** closes the notice.
+4. **Don't notify me about version … again** – tick it, and the notice no longer opens by itself
+   for this version. A newer version is announced again; manual checking and the status-bar update
+   link remain available.
 
-Automatic checking runs shortly after startup and can be disabled in **Settings**. Use
+The **automatic update check at program start** runs shortly after the start and can be switched
+off in **Settings → General**. Use
 **Help → Check for updates…** or the About dialog to check manually. Offline checks and GitHub
 rate limits are reported for manual checks; startup failures stay quiet. The update check sends
 no serial content or device names, but GitHub receives normal network metadata, including the
@@ -1025,6 +1029,19 @@ These tests only ever touch the port you name – nothing is sent to other conne
 > the TX line and the echo does not get through. The board's USB chip has a 128-byte buffer and loses
 > data under sustained load depending on its firmware and pacing – `npm run test:hardware` measures the tested setup, while the tests
 > above send in small blocks and work up to 1 Mbaud.
+
+### Long-run test with real boards
+
+Arduino Uno, Mega 2560, Nano ESP32 and ESP32 boards run a test firmware (protocol SMP-TD/1) that
+checks every frame itself; an adapter with bridged RX/TX serves as a loopback. One command asks for
+the duration and whether the test runs in the terminal (serial layer) or through the user interface:
+
+```bash
+npm run firmware -- flash all   # once: flash the boards (see hardware/README.md)
+npm run longrun                 # duration in minutes, terminal or GUI, devices or simulator
+```
+
+Details and pass criteria: [docs/LONG_RUN_TEST.md](docs/LONG_RUN_TEST.md).
 
 ### Screenshots
 

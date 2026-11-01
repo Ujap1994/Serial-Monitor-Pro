@@ -44,10 +44,13 @@ test.describe('sequence presets', () => {
     await page.getByTestId('command-name').fill('Chain');
     await page.getByTestId('command-sequence').check();
     await page.getByTestId('command-step-add').click();
-    await page.getByTestId('command-step-data-0').fill('ZZ');
+    await page.getByTestId('command-steps').locator('select').first().selectOption('DEC');
+    await page.getByTestId('command-step-data-0').fill('999');
     await page.getByTestId('command-save').click();
     await expect(page.getByTestId('command-editor')).toContainText('Step 1:');
-    await page.getByTestId('command-step-data-0').fill('01 02');
+    await page.getByTestId('command-steps').locator('select').first().selectOption('HEX');
+    await page.getByTestId('command-step-data-0').fill('0102');
+    await expect(page.getByTestId('command-step-data-0')).toHaveValue('01 02');
     await page.getByTestId('command-step-add').click();
     await page.getByTestId('command-step-data-1').fill('03');
     await page.getByTestId('command-save').click();
@@ -104,9 +107,9 @@ test('the decoder shows the details of a packet', async ({ page }) => {
   await page.getByTestId('protocol-output').getByRole('option').first().click();
   await expect(details).toContainText('valid');
   await expect(details).not.toContainText('invalid');
-  await page.getByTestId('protocol-input').fill('ZZ');
-  await page.getByTestId('protocol-decode').click();
-  await expect(page.getByTestId('protocol-error')).toContainText('not a valid hexadecimal number');
+  // Modbus RTU input is HEX: lower case becomes upper case, other characters are dropped.
+  await page.getByTestId('protocol-input').fill('01 03 zz 00');
+  await expect(page.getByTestId('protocol-input')).toHaveValue('01 03 00');
 });
 
 test.describe('folder settings', () => {
@@ -133,4 +136,26 @@ test.describe('folder settings', () => {
     await expect(page.getByTestId('storage-paths')).toContainText(join(data, 'commands.json'));
     await expect(page.getByTestId('storage-paths')).toContainText(logs);
   });
+});
+
+test('HEX fields are formatted while typing, also in the CRC calculator and editors', async ({
+  page,
+}) => {
+  await page.getByTestId('tab-crc').click();
+  await page.getByTestId('crc-format').selectOption('HEX');
+  await page.getByTestId('crc-input').fill('a5cd11');
+  await expect(page.getByTestId('crc-input')).toHaveValue('A5 CD 11');
+  await page.getByTestId('crc-algo').selectOption('CRC-8/MAXIM');
+  await expect(page.getByTestId('crc-result')).toContainText('0x3D');
+  // Text in ASCII stays as typed.
+  await page.getByTestId('crc-format').selectOption('ASCII');
+  await page.getByTestId('crc-input').fill('a5cd11');
+  await expect(page.getByTestId('crc-input')).toHaveValue('a5cd11');
+  await page.getByTestId('tab-stop').click();
+  await page.getByTestId('page-stop').locator('select').nth(1).selectOption('HEX');
+  await page.getByTestId('stop-pattern').fill('ff00');
+  await expect(page.getByTestId('stop-pattern')).toHaveValue('FF 00');
+  await page.getByTestId('tab-frameparser').click();
+  await page.getByTestId('frame-header').fill('aa55');
+  await expect(page.getByTestId('frame-header')).toHaveValue('AA 55');
 });

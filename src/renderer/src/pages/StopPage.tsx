@@ -22,6 +22,7 @@ import {
   Select,
 } from '../components/ui';
 import { useT } from '../lib/i18n';
+import { useHexChange } from '../components/useHexChange';
 import { useLatest } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import { appStore, setBusy, setStatus } from '../state/app';
@@ -40,6 +41,7 @@ export function StopPage(): ReactNode {
     disconnect: false,
   });
   const paused = useStore(appStore, (s) => s.monitorPaused);
+  const hex = useHexChange();
   const [active, setActive] = useState(false);
   const [state, setState] = useState(t('stop.inactive'));
   const log = useRef<TextLogHandle>(null);
@@ -133,7 +135,7 @@ export function StopPage(): ReactNode {
                   value={cond.pattern}
                   disabled={active}
                   placeholder={t('stop.patternPlaceholder')}
-                  onChange={(e) => set({ pattern: e.target.value })}
+                  onChange={hex(cond.patternFmt, (pattern) => set({ pattern }))}
                   data-testid="stop-pattern"
                 />
               </Field>

@@ -665,7 +665,7 @@ export const en: Record<keyof typeof de, string> = {
   'settings.autoReconnect': 'Reconnect automatically when the device comes back',
   'settings.simulator': 'Show simulated test devices',
   'settings.simulatorHint':
-    'Adds five virtual devices to the port list (loopback, sensor, Modbus, GPS, binary telegrams) – to try everything without hardware.',
+    'Adds six virtual devices to the port list (loopback, sensor, Modbus, GPS, binary telegrams, long-run test device) – to try everything without hardware.',
   'settings.storage': 'Storage',
   'settings.storage.settings': 'Settings',
   'settings.storage.commands': 'Commands',
@@ -748,6 +748,7 @@ export const en: Record<keyof typeof de, string> = {
   'sim.modbus': 'Simulator: Modbus RTU slave (ID 1)',
   'sim.gps': 'Simulator: GPS receiver (NMEA 0183)',
   'sim.frames': 'Simulator: binary telegrams (AA 55 + length + CRC-8)',
+  'sim.testdevice': 'Simulator: long-run test device (SMP-TD/1, like the test firmware)',
   'conn.flow': 'Flow',
   'conn.flowTip': 'Flow control (handshake): none, hardware (RTS/CTS) or software (XON/XOFF)',
   'conn.flow.none': 'none',
@@ -816,9 +817,11 @@ export const en: Record<keyof typeof de, string> = {
   'update.released': 'released {date}',
   'update.download': 'Open download page',
   'update.later': 'Later',
-  'update.skip': 'Skip this version',
+  'update.skip': "Don't notify me about version {version} again",
   'update.statusBar': 'Update {version} available',
-  'settings.updateCheck': 'Check for new versions at startup',
+  'update.autoHint':
+    'The automatic check at startup can be switched off in the settings. A newer version is announced again even when this box is ticked.',
+  'settings.updateCheck': 'Automatic update check at program start',
   'settings.updateHint':
     'Requests the public release list from GitHub. Serial data and device names are not sent. GitHub receives ordinary connection metadata, including your IP address.',
   'about.checkUpdates': 'Check for updates',

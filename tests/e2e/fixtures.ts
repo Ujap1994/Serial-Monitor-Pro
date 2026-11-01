@@ -43,7 +43,10 @@ export function makeProfile(seed: Seed = {}): string {
  */
 export const packaged = process.env.SMP_APP_EXECUTABLE;
 
-export async function launch(profile: string): Promise<{ app: ElectronApplication; page: Page }> {
+export async function launch(
+  profile: string,
+  env: Record<string, string> = {},
+): Promise<{ app: ElectronApplication; page: Page }> {
   const args = packaged ? ['--simulator'] : [root, '--simulator'];
   // Chromium's sandbox needs privileges that CI containers usually lack.
   if (process.platform === 'linux') args.push('--no-sandbox');
@@ -56,6 +59,7 @@ export async function launch(profile: string): Promise<{ app: ElectronApplicatio
       SMP_NO_LEGACY_IMPORT: '1',
       SMP_NO_UPDATE_CHECK: '1',
       NODE_ENV: 'production',
+      ...env,
     },
   });
   const page = await app.firstWindow();

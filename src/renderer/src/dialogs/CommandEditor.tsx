@@ -13,6 +13,7 @@ import {
 import { DATA_FORMATS, type DataFormat } from '@shared/core/format';
 import { Modal } from '../components/Modal';
 import { Button, Check, Field, Input, NumberInput, Select } from '../components/ui';
+import { useHexChange } from '../components/useHexChange';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore } from '../state/app';
@@ -27,6 +28,7 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
   const t = useT();
   const [cmd, setCmd] = useState<Command>(() => ({ ...newCommand(), ...command }));
   const [error, setError] = useState('');
+  const hex = useHexChange();
   const crc = useStore(appStore, (s) => s.settings.transmitCrc);
   const update = (patch: Partial<Command>): void => {
     setCmd((c) => ({ ...c, ...patch }));
@@ -131,7 +133,7 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
                   mono
                   value={step.data}
                   placeholder={t('command.dataPlaceholder')}
-                  onChange={(e) => setStep(i, { data: e.target.value })}
+                  onChange={hex(step.fmt, (data) => setStep(i, { data }))}
                   data-testid={`command-step-data-${i}`}
                 />
                 <NumberInput
@@ -181,7 +183,7 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
               mono
               value={cmd.data}
               placeholder={t('command.dataPlaceholder')}
-              onChange={(e) => update({ data: e.target.value })}
+              onChange={hex(cmd.fmt, (data) => update({ data }))}
               data-testid="command-data"
               aria-invalid={Boolean(error)}
             />

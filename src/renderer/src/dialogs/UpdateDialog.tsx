@@ -3,7 +3,7 @@ import { CircleCheck, Download, TriangleAlert } from 'lucide-react';
 import { releaseChanges } from '@shared/core/updates';
 import { Markdown } from '../components/Markdown';
 import { Modal } from '../components/Modal';
-import { Button } from '../components/ui';
+import { Button, Check } from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore, updateSettings } from '../state/app';
@@ -18,6 +18,7 @@ export function UpdateDialog({ onClose }: { onClose: () => void }): ReactNode {
   const current = info?.version ?? '';
   const newer = update?.newer ?? [];
   const latest = latestVersion();
+  const skipped = useStore(appStore, (s) => s.settings.updateSkipped);
   const error = update?.error ?? null;
   const open = (path: string) => () => void window.smp.app.openExternal(`${repo}${path}`);
   const date = (iso: string): string => {
@@ -38,15 +39,13 @@ export function UpdateDialog({ onClose }: { onClose: () => void }): ReactNode {
       footer={
         newer.length ? (
           <>
-            <Button
-              size="sm"
-              onClick={() => {
-                updateSettings({ updateSkipped: latest });
-                onClose();
-              }}
+            <Check
+              checked={skipped === latest}
+              onChange={(skip) => updateSettings({ updateSkipped: skip ? latest : '' })}
+              testId="update-skip"
             >
-              {t('update.skip')}
-            </Button>
+              {t('update.skip', { version: latest })}
+            </Check>
             <span className="spacer" />
             <Button onClick={onClose}>{t('update.later')}</Button>
             <Button variant="primary" icon={Download} onClick={open('/releases/latest')}>
@@ -92,6 +91,9 @@ export function UpdateDialog({ onClose }: { onClose: () => void }): ReactNode {
           >
             {repo.replace(/^https:\/\//, '')}/releases
           </a>
+          <p className="muted small" data-testid="update-auto-hint">
+            {t('update.autoHint')}
+          </p>
         </>
       )}
     </Modal>

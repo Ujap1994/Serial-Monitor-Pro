@@ -15,6 +15,7 @@ import { NEWLINES, type Newline } from '@shared/core/commands';
 import { DATA_FORMATS, parseSendData, type DataFormat } from '@shared/core/format';
 import { Modal } from '../components/Modal';
 import { Button, Field, Input, NumberInput, Select } from '../components/ui';
+import { useHexChange } from '../components/useHexChange';
 import { useT } from '../lib/i18n';
 
 function dataError(data: string, fmt: DataFormat): string {
@@ -63,13 +64,14 @@ function SendFields({
   testId: string;
 }): ReactNode {
   const t = useT();
+  const hex = useHexChange();
   return (
     <>
       <Field label={label} className="span-2">
         <Input
           mono
           value={data}
-          onChange={(e) => onChange({ data: e.target.value })}
+          onChange={hex(fmt, (data) => onChange({ data }))}
           data-testid={testId}
         />
       </Field>
@@ -102,6 +104,7 @@ export function TriggerEditor({
 }): ReactNode {
   const t = useT();
   const [tr, setTr] = useState<Trigger>(() => ({ ...newTrigger(), ...trigger }));
+  const hex = useHexChange();
   const [error, setError] = useState('');
   const update = (patch: Partial<Trigger>): void => {
     setTr((x) => ({ ...x, ...patch }));
@@ -148,7 +151,7 @@ export function TriggerEditor({
           <Input
             mono
             value={tr.pattern}
-            onChange={(e) => update({ pattern: e.target.value })}
+            onChange={hex(tr.match, (pattern) => update({ pattern }))}
             data-testid="trigger-pattern"
           />
         </Field>

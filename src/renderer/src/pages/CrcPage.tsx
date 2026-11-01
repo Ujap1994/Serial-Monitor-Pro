@@ -21,6 +21,7 @@ import {
   PageHeader,
   Select,
 } from '../components/ui';
+import { useHexChange } from '../components/useHexChange';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore, setTab, updateSettings } from '../state/app';
@@ -191,6 +192,7 @@ export function CrcPage(): ReactNode {
   const [bigEndian, setBigEndian] = useState(txBigEndian);
   const [input, setInput] = useState('');
   const [compare, setCompare] = useState(false);
+  const hex = useHexChange();
 
   const parsed = useMemo((): { data: Uint8Array | null; error: string } => {
     try {
@@ -244,7 +246,7 @@ export function CrcPage(): ReactNode {
                 spellCheck={false}
                 value={input}
                 placeholder={t('crc.placeholder')}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={hex(fmt, setInput)}
                 aria-invalid={Boolean(parsed.error)}
                 data-testid="crc-input"
               />

@@ -686,7 +686,7 @@ export const de = {
   'settings.autoReconnect': 'Automatisch neu verbinden, wenn das Gerät zurückkommt',
   'settings.simulator': 'Simulierte Testgeräte anzeigen',
   'settings.simulatorHint':
-    'Fügt der Portliste fünf virtuelle Geräte hinzu (Loopback, Sensor, Modbus, GPS, Binärtelegramme) – zum Ausprobieren ohne Hardware.',
+    'Fügt der Portliste sechs virtuelle Geräte hinzu (Loopback, Sensor, Modbus, GPS, Binärtelegramme, Langzeit-Testgerät) – zum Ausprobieren ohne Hardware.',
   'settings.storage': 'Ablage',
   'settings.storage.settings': 'Einstellungen',
   'settings.storage.commands': 'Befehle',
@@ -771,6 +771,7 @@ export const de = {
   'sim.modbus': 'Simulator: Modbus-RTU-Slave (ID 1)',
   'sim.gps': 'Simulator: GPS-Empfänger (NMEA 0183)',
   'sim.frames': 'Simulator: Binärtelegramme (AA 55 + Länge + CRC-8)',
+  'sim.testdevice': 'Simulator: Langzeit-Testgerät (SMP-TD/1, wie die Test-Firmware)',
   'conn.flow': 'Fluss',
   'conn.flowTip': 'Flusskontrolle (Handshake): keine, Hardware (RTS/CTS) oder Software (XON/XOFF)',
   'conn.flow.none': 'keine',
@@ -839,9 +840,11 @@ export const de = {
   'update.released': 'veröffentlicht am {date}',
   'update.download': 'Zur Download-Seite',
   'update.later': 'Später',
-  'update.skip': 'Diese Version überspringen',
+  'update.skip': 'Für Version {version} keine Meldung mehr anzeigen',
   'update.statusBar': 'Update {version} verfügbar',
-  'settings.updateCheck': 'Beim Start nach neuen Versionen suchen',
+  'update.autoHint':
+    'Die automatische Prüfung beim Start lässt sich in den Einstellungen abschalten. Eine noch neuere Version wird trotz des Hakens wieder gemeldet.',
+  'settings.updateCheck': 'Automatische Update-Prüfung beim Programmstart',
   'settings.updateHint':
     'Fragt die öffentliche Release-Liste bei GitHub ab. Serielle Daten und Gerätenamen werden nicht übertragen. GitHub erhält übliche Verbindungsdaten, darunter deine IP-Adresse.',
   'about.checkUpdates': 'Nach Updates suchen',

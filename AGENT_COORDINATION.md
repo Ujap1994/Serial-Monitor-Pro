@@ -7,12 +7,13 @@ not an atomic lock: check with the active agent before overlapping work.
 
 ## Active work — 2026-10-31
 
-| Owner       | Status                                                                                                                                            | Scope / files                                                                                                                                    | Next handoff                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Codex       | Local validation complete                                                                                                                         | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
-| Claude Code | Done – 1.2.0 on `main`: sequence presets, graph regex channels/colours, multi-port separate view, decoder detail pane, configurable storage paths | Presets/commands core, graph, multi-port, protocol, settings/storage (main+renderer), tests, docs, release                                       | Commit on `main`, CI and release links below                      |
-| Claude Code | Done – merged to `main`, release v1.1.0                                                                                                           | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
-| Claude Code | Draft integrated by Codex                                                                                                                         | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
+| Owner       | Status                                                                                                                                                                                     | Scope / files                                                                                                                                    | Next handoff                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Codex       | Local validation complete                                                                                                                                                                  | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
+| Claude Code | Done – 1.3.0: HEX input formatting everywhere, update notice checkbox, long-run test (firmware for Uno/Nano ESP32/Mega 2560/ESP32-WROOM, `sim:testdevice`, soak runner, `npm run longrun`) | src (inputs, update dialog, simulator), `hardware/`, `scripts/`, `tests/soak`, docs                                                              | Commit on `main`, CI, release                                     |
+| Claude Code | Done – 1.2.0 on `main`: sequence presets, graph regex channels/colours, multi-port separate view, decoder detail pane, configurable storage paths                                          | Presets/commands core, graph, multi-port, protocol, settings/storage (main+renderer), tests, docs, release                                       | Commit on `main`, CI and release links below                      |
+| Claude Code | Done – merged to `main`, release v1.1.0                                                                                                                                                    | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
+| Claude Code | Draft integrated by Codex                                                                                                                                                                  | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
 
 Working branch: `codex/crc-transmit`, starting at `48920f1` (1.0.2).
 The original tracked diff is backed up locally at `/private/tmp/smp-before-codex.patch`.
@@ -90,3 +91,20 @@ covered by `tests/e2e/layout.spec.ts`. CI on `main` (`5bf8a9c`) passed on Linux,
 https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41260417056. Release workflow passed –
 https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41260852217. Release with 24 packages and
 SHA256SUMS: https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v1.2.0
+
+## Claude Code handoff — 2026-11-01 (1.3.0)
+
+HEX fields format while typing everywhere; update notice: "don't notify about this version"
+checkbox, setting renamed "automatic update check at program start" (live GitHub feed verified:
+1.1.0 sees 1.2.0, 1.2.0 is up to date). Long-run test: firmware `hardware/smp-testdevice`
+(SMP-TD/1) flashed on Uno R3, Mega 2560, Nano ESP32 and ESP32-WROOM-32 via `npm run firmware`;
+`sim:testdevice`; terminal runner (`npm run soak`), GUI runner (`npm run soak:gui`), starter
+`npm run longrun`. Devices are approved only via the local, git-ignored
+`hardware/devices.local.json` (serial number + VID/PID; "never" list for the VDE tester and the
+monitor).
+
+Measured: 3-minute terminal runs with all four boards passed (≈5 000 requests each, 0 timeouts,
+0 changed answers, 0 stream gaps, Nano ESP32 reconnects after RESET); 3-minute GUI run with all four
+boards passed (715 frames accepted by the Uno, 0 rejected, 0 console errors). `npm run check`
+passed locally (60 Electron tests, 3 hardware skipped). Open: overnight/weekend runs by the owner,
+RS232/485 loopback adapter not yet connected.

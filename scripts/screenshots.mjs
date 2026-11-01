@@ -547,6 +547,7 @@ async function guide() {
       $('update-summary'),
       $('update-changes'),
       page.getByRole('button', { name: m('update.download'), exact: true }),
+      { target: page.locator('label', { has: $('update-skip') }), at: 'bl' },
     ]);
     await page.keyboard.press('Escape');
 

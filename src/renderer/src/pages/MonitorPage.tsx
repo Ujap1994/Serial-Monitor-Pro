@@ -19,6 +19,7 @@ import { monitorPacket, monitorSendBytes, type TransmitCrcConfig } from '@shared
 import { MonitorView } from '../components/LogView';
 import { PacketPreview } from '../components/PacketPreview';
 import { Button, Card, Check, Input, NumberInput, Select } from '../components/ui';
+import { useHexChange } from '../components/useHexChange';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
 import { appStore, setTab, updateSettings } from '../state/app';
@@ -202,6 +203,7 @@ function SendBar(): ReactNode {
   const history = useRef<string[]>([]);
   const historyPos = useRef(-1);
   const crc = s.transmitCrc;
+  const hex = useHexChange();
   const setCrc = (patch: Partial<TransmitCrcConfig>): void =>
     updateSettings({ transmitCrc: { ...crc, ...patch } });
   // Periodic sending reads the input before every send (like the Python version).
@@ -220,8 +222,6 @@ function SendBar(): ReactNode {
   }, [text, s.sendFormat, s.newline, crc]);
 
   const hexOptions = { uppercase: s.hexUppercase, group: s.hexGroup, groupSize: s.hexGroupSize };
-  const hexField = (value: string): string =>
-    s.sendFormat === 'HEX' ? formatHexInput(value, -1, hexOptions).text : value;
 
   const applyHex = (value: string, caret: number): void => {
     const out = formatHexInput(value, caret, hexOptions);
@@ -351,7 +351,7 @@ function SendBar(): ReactNode {
           placeholder={t('crc.header')}
           title={t('crc.useHeaderTip')}
           disabled={!crc.useHeader}
-          onChange={(e) => setCrc({ header: hexField(e.target.value) })}
+          onChange={hex(s.sendFormat, (header) => setCrc({ header }))}
           data-testid="monitor-header"
         />
         <Input
@@ -394,7 +394,7 @@ function SendBar(): ReactNode {
           placeholder={t('crc.footer')}
           title={t('crc.useFooterTip')}
           disabled={!crc.useFooter}
-          onChange={(e) => setCrc({ footer: hexField(e.target.value) })}
+          onChange={hex(s.sendFormat, (footer) => setCrc({ footer }))}
           data-testid="monitor-footer"
         />
         <Button

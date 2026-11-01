@@ -10,10 +10,14 @@ import { readUInt, writeUInt, encodeUtf8, decodeLatin1 } from '@shared/core/byte
 import { calculateCrc } from '@shared/core/crc';
 import { buildModbusFrame } from '@shared/core/modbus';
 import { withNmeaChecksum } from '@shared/core/nmea';
+import { TestDeviceCore } from '@shared/core/testdevice';
 
 export const SIM_PREFIX = 'sim:';
 
-const DEVICES = ['loopback', 'sensor', 'modbus', 'gps', 'frames'] as const;
+/** AUTO period of the simulated test device ("EEPROM" of the simulator). */
+let simulatedAuto = 0;
+
+const DEVICES = ['loopback', 'sensor', 'modbus', 'gps', 'frames', 'testdevice'] as const;
 type DeviceKind = (typeof DEVICES)[number];
 
 /** Baud rate at which the sensor simulator produces readable text. */
@@ -55,6 +59,7 @@ export class SimulatedDevice {
   private readonly random = rng(0x5eed);
   private tick = 0;
   private closed = false;
+  private testDevice: TestDeviceCore | null = null;
   readonly kind: DeviceKind;
 
   constructor(
@@ -106,6 +111,24 @@ export class SimulatedDevice {
         });
         break;
       case 'loopback':
+        break;
+      case 'testdevice':
+        // The long-run test device (protocol SMP-TD/1), like the firmware on the
+        // test boards: it boots shortly after opening, as an Arduino does.
+        this.testDevice = new TestDeviceCore(
+          {
+            write: (data) => this.emit(data),
+            // Kept for the life of the program, like EEPROM across reconnects.
+            loadAuto: () => simulatedAuto,
+            saveAuto: (ms) => {
+              simulatedAuto = ms;
+            },
+          },
+          () => performance.now(),
+          'simulator',
+        );
+        this.later(300, () => this.testDevice?.boot());
+        this.every(5, () => this.testDevice?.tick());
         break;
     }
   }
@@ -179,6 +202,11 @@ export class SimulatedDevice {
         // RTU: a telegram ends after a pause of 3.5 characters.
         this.modbusTimer = setTimeout(() => this.modbusFrame(), 15);
         break;
+      case 'testdevice': {
+        const copy = data.slice();
+        this.later(1, () => this.testDevice?.input(copy));
+        break;
+      }
       case 'gps':
       case 'frames':
         // these devices only transmit

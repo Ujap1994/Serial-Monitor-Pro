@@ -22,6 +22,7 @@ import {
   Select,
 } from '../components/ui';
 import { useT } from '../lib/i18n';
+import { useHexChange } from '../components/useHexChange';
 import { useLatest } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import { appStore, setBusy, updateSettings } from '../state/app';
@@ -54,6 +55,7 @@ export function FrameParserPage(): ReactNode {
   const config = useStore(appStore, (s) => s.settings.frame);
   const [live, setLive] = useState(false);
   const [test, setTest] = useState('');
+  const hex = useHexChange();
   const [stats, setStats] = useState({ frames: 0, ok: 0, bad: 0 });
   const log = useRef<TextLogHandle>(null);
   const buffer = useRef<Uint8Array>(new Uint8Array());
@@ -133,7 +135,7 @@ export function FrameParserPage(): ReactNode {
               mono
               value={config.header}
               placeholder="AA 55"
-              onChange={(e) => set({ header: e.target.value })}
+              onChange={hex('HEX', (header) => set({ header }))}
               data-testid="frame-header"
             />
           </Field>
@@ -142,7 +144,7 @@ export function FrameParserPage(): ReactNode {
               mono
               value={config.footer}
               placeholder="03"
-              onChange={(e) => set({ footer: e.target.value })}
+              onChange={hex('HEX', (footer) => set({ footer }))}
             />
           </Field>
           <Field label={t('frames.lengthField')}>
@@ -266,7 +268,7 @@ export function FrameParserPage(): ReactNode {
             className="grow"
             value={test}
             placeholder={t('frames.testPlaceholder')}
-            onChange={(e) => setTest(e.target.value)}
+            onChange={hex('HEX', setTest)}
             onKeyDown={(e) => e.key === 'Enter' && parseTest()}
             data-testid="frame-test-input"
           />

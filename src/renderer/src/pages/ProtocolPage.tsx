@@ -11,6 +11,7 @@ import {
 import { decodeNmea, isNmeaValid } from '@shared/core/nmea';
 import { fileStamp, formatTimestamp } from '@shared/core/timestamp';
 import { Button, Card, Check, Empty, Input, PageHeader, Select } from '../components/ui';
+import { useHexChange } from '../components/useHexChange';
 import { useT } from '../lib/i18n';
 import { setBusy, setStatus } from '../state/app';
 import { rxBus } from '../state/serial';
@@ -103,6 +104,7 @@ export function ProtocolPage(): ReactNode {
   const [live, setLive] = useState(false);
   const [showInvalid, setShowInvalid] = useState(true);
   const [test, setTest] = useState('');
+  const hex = useHexChange();
   const [counts, setCounts] = useState({ total: 0, valid: 0 });
   const [shown, setShown] = useState<Packet[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
@@ -304,7 +306,7 @@ export function ProtocolPage(): ReactNode {
             className="grow"
             value={test}
             placeholder={t('protocol.testPlaceholder')}
-            onChange={(e) => setTest(e.target.value)}
+            onChange={hex(protocol === 'modbus' ? 'HEX' : 'ASCII', setTest)}
             onKeyDown={(e) => e.key === 'Enter' && decode(test)}
             data-testid="protocol-input"
           />

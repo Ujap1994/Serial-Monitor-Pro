@@ -6,6 +6,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.3.0] – 2026-11-01
+
+### Added
+
+- **Automated long-run test**: `npm run longrun` asks for the duration in minutes and runs the
+  terminal test (the application's serial layer against all boards in parallel), the GUI test (the
+  real application with periodic CRC sending, multi-port, graph, decoder, triggers and scheduler)
+  or both – with the boards or the simulator. Reports with per-device statistics, latencies and
+  memory over time; the Mac stays awake during the run.
+- **Test firmware** for Arduino Uno R3, Mega 2560, Nano ESP32 and ESP32-WROOM-32 (protocol
+  SMP-TD/1): answers with known content, checks CRC frames itself, streams sensor/NMEA/Modbus data
+  with sequence numbers, bursts, restarts on command. `npm run firmware` detects, flashes and checks
+  the boards – only approved devices, matched by USB serial number, with a "never" list.
+- **Simulated test device** `sim:testdevice` with exactly the behaviour of the firmware.
+- **Update notice**: a checkbox _Don't notify me about version … again_ replaces the skip button;
+  the setting is called _Automatic update check at program start_.
+
+### Fixed
+
+- HEX input is formatted while typing (upper case and grouping as set) in every HEX field: the CRC
+  calculator, header and footer, command and step editors, triggers and schedules, stop pattern,
+  frame parser and the Modbus test input – lower-case input stayed lower case there.
+
+### Tests
+
+- Unit tests for the test device protocol and the long-run test program (which runs briefly against
+  the simulators in every CI build); Electron tests for the update notice at startup, its checkbox
+  and the setting, and for HEX formatting.
+- Measured on the boards: 3-minute terminal runs on all four boards (about 5 000 requests each,
+  no timeout, no changed answer, no stream gap) and a 3-minute GUI run with all four boards.
+
 ## [1.2.0] – 2026-11-01
 
 Completes the comparison with the former Python (CustomTkinter) version: every function of that

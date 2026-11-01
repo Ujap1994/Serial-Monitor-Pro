@@ -58,9 +58,14 @@ test('calculates CRCs against the check vector', async ({ page }) => {
   await expect(page.getByTestId('crc-result')).toContainText('0x4B37');
   await page.getByTestId('crc-compare').click();
   await expect(page.getByTestId('crc-table')).toContainText('0xCBF43926');
+  // HEX fields drop everything that is not a hex digit while typing …
   await page.getByTestId('crc-format').selectOption('HEX');
   await page.getByTestId('crc-input').fill('ZZ');
-  await expect(page.getByTestId('page-crc')).toContainText('not a valid hexadecimal number');
+  await expect(page.getByTestId('crc-input')).toHaveValue('');
+  // … other formats explain what is wrong.
+  await page.getByTestId('crc-format').selectOption('DEC');
+  await page.getByTestId('crc-input').fill('999');
+  await expect(page.getByTestId('crc-calc-error')).toContainText('only values from 0 to 255');
 });
 
 test('decodes Modbus and NMEA examples', async ({ page }) => {

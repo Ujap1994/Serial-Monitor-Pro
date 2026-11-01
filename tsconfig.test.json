@@ -16,6 +16,8 @@
   "include": [
     "vitest.config.ts",
     "playwright.config.ts",
+    "playwright.soak.config.ts",
+    "vitest.soak.config.ts",
     "tests/**/*",
     "src/shared/**/*",
     "src/main/serial.ts",

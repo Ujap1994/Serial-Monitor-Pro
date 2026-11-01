@@ -1,6 +1,7 @@
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { connect, expect, menu, test } from './fixtures';
+import type { Settings } from '@shared/core/settings';
+import { connect, expect, launch, makeProfile, menu, test } from './fixtures';
 
 test('controls DTR/RTS and reserves RTS for hardware handshaking', async ({ page }) => {
   await page.getByTestId('flow-select').selectOption('rtscts');
@@ -114,4 +115,53 @@ test('shows all newer stable release changes and the download link without execu
     'href',
     'https://github.com/Ujap1994/Serial-Monitor-Pro/releases',
   );
+});
+
+test('announces a new version at startup until it is skipped or the check is switched off', async () => {
+  const profile = makeProfile();
+  const feed = join(profile, 'releases.json');
+  const release = (version: string) => ({
+    tag_name: `v${version}`,
+    name: `Release ${version}`,
+    body: `### Added\n\n- Feature of ${version}`,
+    published_at: '2026-11-01T00:00:00Z',
+  });
+  writeFileSync(feed, JSON.stringify([release('9.2.0')]));
+  const env = { SMP_NO_UPDATE_CHECK: '', SMP_UPDATE_FEED: feed };
+
+  // 1. Startup: the notice appears by itself and lists the changes.
+  let run = await launch(profile, env);
+  await expect(run.page.getByTestId('update-dialog')).toBeVisible({ timeout: 10_000 });
+  await expect(run.page.getByTestId('update-changes')).toContainText('Feature of 9.2.0');
+  await run.page.getByTestId('update-skip').check();
+  await expect
+    .poll(
+      () =>
+        (JSON.parse(readFileSync(join(profile, 'settings.json'), 'utf8')) as Settings)
+          .updateSkipped,
+    )
+    .toBe('9.2.0');
+  await run.app.close();
+
+  // 2. The skipped version is not announced again …
+  run = await launch(profile, env);
+  await run.page.waitForTimeout(3500);
+  await expect(run.page.getByTestId('update-dialog')).toBeHidden();
+  await run.app.close();
+
+  // 3. … but a newer one is.
+  writeFileSync(feed, JSON.stringify([release('9.3.0'), release('9.2.0')]));
+  run = await launch(profile, env);
+  await expect(run.page.getByTestId('update-dialog')).toBeVisible({ timeout: 10_000 });
+  await expect(run.page.getByTestId('update-skip')).not.toBeChecked();
+  await run.page.keyboard.press('Escape');
+  // 4. Switched off in the settings: no check at startup.
+  await run.page.getByTestId('open-settings').click();
+  await run.page.getByText('Automatic update check at program start').click();
+  await run.page.getByTestId('settings-save').click();
+  await run.app.close();
+  run = await launch(profile, env);
+  await run.page.waitForTimeout(3500);
+  await expect(run.page.getByTestId('update-dialog')).toBeHidden();
+  await run.app.close();
 });

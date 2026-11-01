@@ -5,6 +5,7 @@ import { DATA_FORMATS, InputError, parseSendData, type DataFormat } from '@share
 import { newStep, type Step, type StepKind } from '@shared/core/steps';
 import { Modal } from '../components/Modal';
 import { Button, Field, Input, NumberInput, Select } from '../components/ui';
+import { useHexChange } from '../components/useHexChange';
 import { useT } from '../lib/i18n';
 
 interface Props {
@@ -17,6 +18,7 @@ export function StepEditor({ step, onSave, onClose }: Props): ReactNode {
   const t = useT();
   const [s, setS] = useState<Step>(() => ({ ...newStep(), ...step }));
   const [error, setError] = useState('');
+  const hex = useHexChange();
   const update = (patch: Partial<Step>): void => {
     setS((x) => ({ ...x, ...patch }));
     setError('');
@@ -99,7 +101,7 @@ export function StepEditor({ step, onSave, onClose }: Props): ReactNode {
             <Input
               mono
               value={s.data}
-              onChange={(e) => update({ data: e.target.value })}
+              onChange={hex(s.fmt, (data) => update({ data }))}
               aria-invalid={Boolean(error)}
               data-testid="step-data"
             />
