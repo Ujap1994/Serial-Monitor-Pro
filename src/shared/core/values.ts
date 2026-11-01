@@ -2,7 +2,19 @@
 
 import { t } from '../i18n';
 
-export type ExtractMode = 'auto' | 'labeled' | 'separated';
+export type ExtractMode = 'auto' | 'labeled' | 'separated' | 'regex';
+export const EXTRACT_MODES = ['auto', 'labeled', 'separated', 'regex'] as const;
+
+/** A channel of the Python graph: a name, a regular expression and a colour. */
+export interface GraphChannel {
+  name: string;
+  /** The first group in brackets is the value; without a group, the whole match. */
+  pattern: string;
+  color: string;
+  enabled: boolean;
+}
+
+export const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 const NUMBER = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
@@ -105,4 +117,50 @@ export function seriesCsv(
     rows.push(row.join(';'));
   }
   return `\uFEFF${rows.join('\r\n')}\r\n`;
+}
+
+const compiled = new Map<string, RegExp | null>();
+
+function compile(pattern: string): RegExp | null {
+  let regex = compiled.get(pattern);
+  if (regex === undefined) {
+    try {
+      regex = new RegExp(pattern);
+    } catch {
+      regex = null;
+    }
+    if (compiled.size > 256) compiled.clear();
+    compiled.set(pattern, regex);
+  }
+  return regex;
+}
+
+/** Error text of a channel pattern, or '' when it is usable. */
+export function channelPatternError(pattern: string): string {
+  if (!pattern.trim()) return 'empty';
+  try {
+    new RegExp(pattern);
+    return '';
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+/**
+ * Values of the enabled channels in one line (detection mode "own patterns").
+ * Each channel takes its first match; decimal commas are accepted.
+ */
+export function extractChannels(
+  input: string,
+  channels: readonly GraphChannel[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const ch of channels) {
+    if (!ch.enabled || !ch.name.trim() || !ch.pattern) continue;
+    const match = compile(ch.pattern)?.exec(input ?? '');
+    if (!match) continue;
+    const value = toNumber(match[1] ?? match[0]);
+    if (value !== null) out[ch.name.trim()] = value;
+  }
+  return out;
 }

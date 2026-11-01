@@ -8,9 +8,9 @@ import { Modal } from '../components/Modal';
 import { Button, Check, Field, NumberInput, Select } from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useStore } from '../lib/store';
-import { appStore, updateSettings } from '../state/app';
+import { applyPaths, appStore, updateSettings } from '../state/app';
 import { refreshPorts } from '../state/serial';
-import { confirmDialog } from '../state/ui';
+import { confirmDialog, toast } from '../state/ui';
 
 export function SettingsDialog({ onClose }: { onClose: () => void }): ReactNode {
   const t = useT();
@@ -27,10 +27,48 @@ export function SettingsDialog({ onClose }: { onClose: () => void }): ReactNode 
 
   const save = (): void => {
     const simulatorChanged = s.simulator !== saved.simulator;
+    const pathsChanged =
+      s.paths.dataDir !== saved.paths.dataDir || s.paths.logDir !== saved.paths.logDir;
     updateSettings(s);
     if (simulatorChanged) void refreshPorts();
+    if (pathsChanged)
+      void applyPaths(s.paths).then((ok) =>
+        toast(ok ? t('settings.foldersApplied') : t('settings.folderInvalid'), ok ? 'ok' : 'warn'),
+      );
     onClose();
   };
+
+  const chooseFolder = async (key: 'dataDir' | 'logDir', title: string): Promise<void> => {
+    const dir = await window.smp.files.chooseFolder(s.paths[key], title);
+    if (dir) set({ paths: { ...s.paths, [key]: dir } });
+  };
+
+  const folderRow = (key: 'dataDir' | 'logDir', label: string, hint: string, fallback: string) => (
+    <div className="folder-row" data-testid={`folder-${key}`}>
+      <div className="grow">
+        <div className="folder-label">{label}</div>
+        <div className="mono small selectable folder-path">
+          {s.paths[key] || `${t('settings.folderDefault')} – ${fallback}`}
+        </div>
+        <div className="muted small">{hint}</div>
+      </div>
+      <Button
+        size="sm"
+        onClick={() => void chooseFolder(key, label)}
+        data-testid={`folder-${key}-choose`}
+      >
+        {t('settings.folderChoose')}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={!s.paths[key]}
+        onClick={() => set({ paths: { ...s.paths, [key]: '' } })}
+      >
+        {t('settings.folderReset')}
+      </Button>
+    </div>
+  );
 
   return (
     <Modal
@@ -56,6 +94,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }): ReactNode 
                     port: s.port,
                     frame: s.frame,
                     graph: s.graph,
+                    // Data rather than preferences: keep them.
+                    triggers: s.triggers,
+                    schedules: s.schedules,
+                    paths: s.paths,
                     simulator: info?.simulatorForced ? true : DEFAULT_SETTINGS.simulator,
                   });
                 }
@@ -213,7 +255,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }): ReactNode 
       <div className="field-hint">{t('settings.simulatorHint')}</div>
 
       <div className="section-title">{t('settings.storage')}</div>
-      <div className="code-block">
+      {folderRow(
+        'dataDir',
+        t('settings.folderData'),
+        t('settings.folderDataHint'),
+        info?.paths.userData ?? '',
+      )}
+      {folderRow(
+        'logDir',
+        t('settings.folderLogs'),
+        t('settings.folderLogsHint'),
+        info?.paths.logs ?? '',
+      )}
+      <div className="code-block" data-testid="storage-paths">
         {info && (
           <>
             {t('settings.storage.settings')}: {info.paths.settings}
@@ -221,6 +275,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }): ReactNode 
             {t('settings.storage.commands')}: {info.paths.commands}
             <br />
             {t('settings.storage.automation')}: {info.paths.automation}
+            <br />
+            {t('settings.storage.logs')}: {info.paths.logs}
           </>
         )}
       </div>

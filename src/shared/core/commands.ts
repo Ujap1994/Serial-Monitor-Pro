@@ -27,7 +27,29 @@ export interface Command {
   description: string;
   /** Pause of periodic sending of this command (Python: "periodic_ms"). */
   periodicMs: number;
+  /**
+   * Sequence mode of the Python presets ("is_sequence"): instead of `data`, the
+   * steps are sent one after another, each followed by its pause. The command's
+   * line ending and "Append CRC" apply to every step.
+   */
+  sequence: boolean;
+  steps: CommandStep[];
 }
+
+export interface CommandStep {
+  data: string;
+  fmt: DataFormat;
+  /** Pause after this step (Python: "pause_ms"). */
+  pauseMs: number;
+}
+
+/** One write of a command: the bytes and the pause after them. */
+export interface CommandPart {
+  data: Uint8Array;
+  pauseMs: number;
+}
+
+export const MAX_STEP_PAUSE_MS = 600_000;
 
 export function newCommand(partial: Partial<Command> = {}): Command {
   return {
@@ -40,8 +62,36 @@ export function newCommand(partial: Partial<Command> = {}): Command {
     addCrc: false,
     description: '',
     periodicMs: 1000,
+    sequence: false,
+    steps: [],
     ...partial,
   };
+}
+
+/**
+ * The writes of a command in order – one for a normal command, one per step in
+ * sequence mode. Each part includes the CRC (when asked for) and the line
+ * ending. Throws {@link InputError}, naming the step in sequence mode.
+ */
+export function commandParts(
+  cmd: Command,
+  crc: Readonly<TransmitCrcConfig> = DEFAULT_TRANSMIT_CRC,
+): CommandPart[] {
+  const build = (text: string, fmt: DataFormat): Uint8Array => {
+    let data = parseSendData(text, fmt);
+    if (cmd.addCrc && data.length) data = insertCrc(data, crc).data;
+    return concatBytes(data, NEWLINE_BYTES[cmd.newline]);
+  };
+  if (!cmd.sequence) return [{ data: build(cmd.data, cmd.fmt), pauseMs: 0 }];
+  if (!cmd.steps.length) throw new InputError(t('command.stepsMissing'));
+  return cmd.steps.map((step, i) => {
+    try {
+      return { data: build(step.data, step.fmt), pauseMs: step.pauseMs };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new InputError(t('command.stepError', { n: i + 1, message }));
+    }
+  });
 }
 
 /**
@@ -52,9 +102,7 @@ export function commandBytes(
   cmd: Command,
   crc: Readonly<TransmitCrcConfig> = DEFAULT_TRANSMIT_CRC,
 ): Uint8Array {
-  let data = parseSendData(cmd.data, cmd.fmt);
-  if (cmd.addCrc && data.length) data = insertCrc(data, crc).data;
-  return concatBytes(data, NEWLINE_BYTES[cmd.newline]);
+  return concatBytes(...commandParts(cmd, crc).map((p) => p.data));
 }
 
 /** Short preview of the bytes that will actually be sent. */
@@ -62,15 +110,17 @@ export function commandPreview(
   cmd: Command,
   crc: Readonly<TransmitCrcConfig> = DEFAULT_TRANSMIT_CRC,
 ): string {
-  let raw: Uint8Array;
+  let parts: CommandPart[];
   try {
-    raw = commandBytes(cmd, crc);
+    parts = commandParts(cmd, crc);
   } catch (err) {
     return `⚠ ${err instanceof Error ? err.message : String(err)}`;
   }
+  const raw = concatBytes(...parts.map((p) => p.data));
   if (!raw.length) return '—';
   const shown = Array.from(raw.subarray(0, 12), hex2).join(' ');
-  return `${shown}${raw.length > 12 ? ' …' : ''}   (${raw.length} B)`;
+  const size = `${shown}${raw.length > 12 ? ' …' : ''}   (${raw.length} B)`;
+  return cmd.sequence ? `${t('command.stepsCount', { count: parts.length })} · ${size}` : size;
 }
 
 export function validateCommand(
@@ -96,22 +146,37 @@ function int(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
 }
 
+function normalizeStep(value: unknown): CommandStep {
+  const d = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const fmt = d.fmt ?? d.format;
+  return {
+    data: text(d.data),
+    fmt: isDataFormat(fmt) ? fmt : 'HEX',
+    pauseMs: Math.min(MAX_STEP_PAUSE_MS, int(d.pauseMs ?? d.pause_ms, 0)),
+  };
+}
+
 /**
  * Normalises one command from a file. Accepts the field names of the former
- * Python version (`delay_ms`, `add_crc`, `periodic_ms`) as well, so existing exports keep working.
+ * Python versions as well (`format`, `delay_ms`, `add_crc`, `periodic_ms`,
+ * `is_sequence`, `steps` with `pause_ms`), so existing exports keep working.
  */
 export function normalizeCommand(value: unknown): Command {
   const d = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const fmt = d.fmt ?? d.format;
+  const steps = Array.isArray(d.steps) ? d.steps.slice(0, 500).map(normalizeStep) : [];
   return {
     name: text(d.name),
     data: text(d.data),
-    fmt: isDataFormat(d.fmt) ? d.fmt : 'HEX',
+    fmt: isDataFormat(fmt) ? fmt : 'HEX',
     newline: isNewline(d.newline) ? d.newline : 'LF',
     delayMs: int(d.delayMs ?? d.delay_ms, 200),
     enabled: typeof d.enabled === 'boolean' ? d.enabled : true,
     addCrc: (d.addCrc ?? d.add_crc) === true,
     description: text(d.description),
     periodicMs: Math.min(3_600_000, Math.max(10, int(d.periodicMs ?? d.periodic_ms, 1000))),
+    sequence: (d.sequence ?? d.is_sequence) === true,
+    steps,
   };
 }
 

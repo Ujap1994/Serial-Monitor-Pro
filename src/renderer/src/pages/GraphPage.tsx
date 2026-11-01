@@ -1,16 +1,28 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Download, Eraser, LineChart, Pause, Play } from 'lucide-react';
+import { Download, Eraser, LineChart, Pause, Play, Plus, Trash2 } from 'lucide-react';
 import { decodeUtf8 } from '@shared/core/bytes';
 import type { GraphConfig } from '@shared/core/settings';
 import { fileStamp } from '@shared/core/timestamp';
 import {
+  channelPatternError,
+  extractChannels,
   extractValues,
   seriesCsv,
   seriesStats,
   type ExtractMode,
+  type GraphChannel,
   type SeriesStats,
 } from '@shared/core/values';
-import { Button, Card, Check, Field, NumberInput, PageHeader, Select } from '../components/ui';
+import {
+  Button,
+  Card,
+  Check,
+  Field,
+  Input,
+  NumberInput,
+  PageHeader,
+  Select,
+} from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useLatest } from '../lib/hooks';
 import { useStore } from '../lib/store';
@@ -31,6 +43,29 @@ export const SERIES_COLORS = [
 
 type Series = Map<string, number[]>;
 
+/**
+ * Colour of a curve: the channel colour in "own patterns" mode, otherwise a
+ * colour chosen in the legend, otherwise the palette by order of appearance.
+ */
+export function curveColor(config: GraphConfig, name: string, index: number): string {
+  if (config.mode === 'regex') {
+    const channel = config.channels.find((c) => c.name.trim() === name);
+    if (channel) return channel.color;
+  }
+  return config.colors[name] ?? SERIES_COLORS[index % SERIES_COLORS.length] ?? '#3b82f6';
+}
+
+/** Python example channels for the "own patterns" mode. */
+const EXAMPLE_CHANNELS: GraphChannel[] = [
+  { name: 'Temp', pattern: 'Temp:\\s*(-?\\d+(?:[.,]\\d+)?)', color: '#ef4444', enabled: true },
+  {
+    name: 'Humidity',
+    pattern: 'Humidity:\\s*(-?\\d+(?:[.,]\\d+)?)',
+    color: '#3b82f6',
+    enabled: true,
+  },
+];
+
 function niceStep(span: number): number {
   const raw = span / 4;
   const pow = 10 ** Math.floor(Math.log10(raw));
@@ -48,6 +83,7 @@ function draw(
   series: Series,
   hidden: Set<string>,
   emptyText: string,
+  colorOf: (name: string, index: number) => string,
 ): void {
   const ratio = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
@@ -122,7 +158,7 @@ function draw(
 
   const names = [...series.keys()];
   for (const [name, v] of visible) {
-    const color = SERIES_COLORS[names.indexOf(name) % SERIES_COLORS.length] ?? '#3b82f6';
+    const color = colorOf(name, names.indexOf(name));
     const dx = pw / Math.max(1, longest - 1);
     const offset = longest - v.length;
     ctx.strokeStyle = color;
@@ -175,7 +211,10 @@ export function GraphPage(): ReactNode {
       const c = configRef.current;
       let changed = false;
       for (const line of lines) {
-        const values = extractValues(line.trim(), c.mode, c.separator);
+        const values =
+          c.mode === 'regex'
+            ? extractChannels(line.trim(), c.channels)
+            : extractValues(line.trim(), c.mode, c.separator);
         for (const [name, value] of Object.entries(values)) {
           let list = series.current.get(name);
           if (!list) {
@@ -202,7 +241,9 @@ export function GraphPage(): ReactNode {
       if (!dirty.current || time - last < 33 || !canvas.current) return;
       last = time;
       dirty.current = false;
-      draw(canvas.current, series.current, hiddenRef.current, t('graph.empty'));
+      draw(canvas.current, series.current, hiddenRef.current, t('graph.empty'), (name, i) =>
+        curveColor(configRef.current, name, i),
+      );
       setLatest([...series.current.entries()].map(([n, v]) => [n, v[v.length - 1] ?? 0]));
       if (showStatsRef.current) {
         setStats(
@@ -222,7 +263,7 @@ export function GraphPage(): ReactNode {
       cancelAnimationFrame(frame);
       resize.disconnect();
     };
-  }, [tab, t, hiddenRef, showStatsRef]);
+  }, [tab, t, hiddenRef, showStatsRef, configRef]);
 
   useEffect(() => {
     dirty.current = true;
@@ -242,6 +283,20 @@ export function GraphPage(): ReactNode {
       setStatus(t('export.saved', { path }), 'ok');
       toast(t('export.saved', { path }), 'ok');
     }
+  };
+
+  /** Colour from the legend: the channel colour in "own patterns" mode, otherwise per curve. */
+  const setColor = (name: string, color: string): void => {
+    const channel = config.mode === 'regex' && config.channels.find((c) => c.name.trim() === name);
+    if (channel)
+      set({ channels: config.channels.map((c) => (c === channel ? { ...c, color } : c)) });
+    else set({ colors: { ...config.colors, [name]: color } });
+    dirty.current = true;
+  };
+
+  const setChannel = (index: number, patch: Partial<GraphChannel>): void => {
+    set({ channels: config.channels.map((c, i) => (i === index ? { ...c, ...patch } : c)) });
+    dirty.current = true;
   };
 
   // At most three decimals, without trailing zeros (21.63, 39, 1011.2).
@@ -267,9 +322,17 @@ export function GraphPage(): ReactNode {
               options={[
                 { value: 'auto', label: t('graph.mode.auto') },
                 { value: 'labeled', label: t('graph.mode.labeled') },
+                { value: 'regex', label: t('graph.mode.regex') },
                 { value: 'separated', label: t('graph.mode.separated') },
               ]}
-              onChange={(mode) => set({ mode })}
+              onChange={(mode) =>
+                set(
+                  mode === 'regex' && !config.channels.length
+                    ? { mode, channels: EXAMPLE_CHANNELS }
+                    : { mode },
+                )
+              }
+              data-testid="graph-mode"
             />
           </Field>
           <Field label={t('graph.separator')}>
@@ -314,31 +377,113 @@ export function GraphPage(): ReactNode {
             {t('graph.clear')}
           </Button>
         </div>
+        {config.mode === 'regex' && (
+          <div className="channels" data-testid="graph-channels">
+            {config.channels.map((ch, i) => {
+              const error = channelPatternError(ch.pattern);
+              return (
+                <div className="channel-row" key={i}>
+                  <Check
+                    checked={ch.enabled}
+                    onChange={(enabled) => setChannel(i, { enabled })}
+                    title={t('graph.channelEnabled')}
+                  >
+                    {''}
+                  </Check>
+                  <input
+                    type="color"
+                    className="color-swatch"
+                    value={ch.color}
+                    aria-label={t('graph.color')}
+                    onChange={(e) => setChannel(i, { color: e.target.value })}
+                  />
+                  <Input
+                    value={ch.name}
+                    placeholder={t('graph.channelName')}
+                    onChange={(e) => setChannel(i, { name: e.target.value })}
+                    data-testid={`graph-channel-name-${i}`}
+                  />
+                  <Input
+                    mono
+                    value={ch.pattern}
+                    placeholder="Temp:\s*([-\d.]+)"
+                    aria-invalid={Boolean(error && error !== 'empty')}
+                    title={error && error !== 'empty' ? error : t('graph.patternTip')}
+                    onChange={(e) => setChannel(i, { pattern: e.target.value })}
+                    data-testid={`graph-channel-pattern-${i}`}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    iconOnly
+                    icon={Trash2}
+                    title={t('common.delete')}
+                    onClick={() => set({ channels: config.channels.filter((_, j) => j !== i) })}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                </div>
+              );
+            })}
+            <div className="row">
+              <Button
+                size="sm"
+                icon={Plus}
+                disabled={config.channels.length >= 16}
+                onClick={() =>
+                  set({
+                    channels: [
+                      ...config.channels,
+                      {
+                        name: t('graph.valueN', { n: config.channels.length + 1 }),
+                        pattern: '',
+                        color:
+                          SERIES_COLORS[config.channels.length % SERIES_COLORS.length] ?? '#3b82f6',
+                        enabled: true,
+                      },
+                    ],
+                  })
+                }
+                data-testid="graph-channel-add"
+              >
+                {t('graph.channelAdd')}
+              </Button>
+              <span className="muted small">{t('graph.patternHint')}</span>
+            </div>
+          </div>
+        )}
       </Card>
       <div className="legend" data-testid="graph-legend">
         {latest.length === 0 ? (
           <span className="muted">{t('graph.hint')}</span>
         ) : (
           latest.map(([name, value], i) => (
-            <button
-              type="button"
-              key={name}
-              className="legend-item"
-              data-off={hidden.has(name)}
-              title={t('graph.toggleSeries')}
-              onClick={() =>
-                setHidden((h) => {
-                  const next = new Set(h);
-                  if (next.has(name)) next.delete(name);
-                  else next.add(name);
-                  return next;
-                })
-              }
-            >
-              <i style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
-              {name}
-              <b>{Number.isInteger(value) ? value : value.toFixed(2)}</b>
-            </button>
+            <span key={name} className="legend-item" data-off={hidden.has(name)}>
+              <input
+                type="color"
+                className="color-swatch"
+                value={curveColor(config, name, i)}
+                title={t('graph.colorTip')}
+                aria-label={`${t('graph.color')} ${name}`}
+                onChange={(e) => setColor(name, e.target.value)}
+                data-testid={`graph-color-${name}`}
+              />
+              <button
+                type="button"
+                title={t('graph.toggleSeries')}
+                onClick={() =>
+                  setHidden((h) => {
+                    const next = new Set(h);
+                    if (next.has(name)) next.delete(name);
+                    else next.add(name);
+                    return next;
+                  })
+                }
+              >
+                {name}
+                <b>{Number.isInteger(value) ? value : value.toFixed(2)}</b>
+              </button>
+            </span>
           ))
         )}
       </div>

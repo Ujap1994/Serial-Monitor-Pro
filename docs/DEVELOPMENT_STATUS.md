@@ -2,13 +2,13 @@
 
 Serial Monitor Pro is open-source software and may contain errors or bugs. Tests reduce risk;
 they do not certify the application or a connected device. This document describes the state of
-version 1.1.0 (2026-11-01).
+version 1.2.0 (2026-11-01).
 
 ## Python-to-TypeScript parity
 
 The TypeScript application was first migrated from the PySide6 edition of the former Python program.
 That edition was only stage 1 of a migration (monitor, connection, quick commands); the complete
-feature set lived in the CustomTkinter edition (`serial_monitor_full.py`, v3.5). For 1.1.0 the
+feature set lived in the CustomTkinter edition (`serial_monitor_full.py`, v3.5). For 1.1.0 and 1.2.0 the
 CustomTkinter source was compared screen by screen with this repository. The table lists every
 function of that edition and its state here.
 
@@ -22,25 +22,25 @@ function of that edition and its state here.
 | CRC tools           | Include header / footer in CRC                                                                    | ✅ restored in 1.1.0                                                                                                                                         |
 | CRC tools           | CRC parameters, note on byte order, separate calculator (format, method, byte order, HEX/DEC/BIN) | ✅ (plus compare-all and check vector)                                                                                                                       |
 | Presets             | Name, format, data, description, periodic interval, **add CRC**, import/export                    | ✅ restored in 1.1.0                                                                                                                                         |
-| Presets             | Sequence mode (a preset with several steps and pauses)                                            | ⚠️ replaced by the send table and automation sequences; a Python preset in sequence mode is imported as a single command without its steps                   |
+| Presets             | Sequence mode (a preset with several steps and pauses)                                            | ✅ restored in 1.2.0 – steps with format, data and pause; Python sequence presets are imported with their steps                                              |
 | Quick presets panel | Send, periodic, edit                                                                              | ✅ send; periodic and edit on the Presets tab                                                                                                                |
 | Stop condition      | Byte sequence, actions _pause receiving_, _log only_, _log all incl. stop condition_              | ✅ restored in 1.1.0 (plus byte, line and time limits and disconnect); the capture is saved to `Documents/Serial Monitor Pro` instead of the Python log path |
 | Graph               | Live plot, pause, clear, max points, autoscale, export, statistics (min/max/avg/std/median/range) | ✅ statistics table and CSV export restored in 1.1.0                                                                                                         |
-| Graph               | Per-channel regular expressions and colour choice                                                 | ⚠️ automatic `name:value` / separated-number detection with fixed colours instead                                                                            |
+| Graph               | Per-channel regular expressions and colour choice                                                 | ✅ restored in 1.2.0 – detection mode _own patterns_ plus a colour picker for every curve                                                                    |
 | Protocol decoder    | Modbus RTU, **Modbus ASCII**, NMEA; show invalid; statistics; export                              | ✅ Modbus ASCII, statistics, filter and export restored in 1.1.0                                                                                             |
-| Protocol decoder    | Separate packet-details pane                                                                      | ⚠️ one line per packet with all details                                                                                                                      |
+| Protocol decoder    | Separate packet-details pane                                                                      | ✅ restored in 1.2.0 – packet list with a details pane                                                                                                       |
 | Automation          | Macro recording/playback, triggers (regex → response), scheduler, statistics                      | ✅ restored in 1.1.0; macros become sequence steps, triggers also match text/HEX and have a cooldown                                                         |
 | Multi-port          | Port slots, connect/disconnect, RX/TX statistics, **bridge mode** (one or both directions)        | ✅ restored in 1.1.0                                                                                                                                         |
-| Multi-port          | Separate view per port                                                                            | ⚠️ combined colour-coded view only                                                                                                                           |
+| Multi-port          | Separate view per port                                                                            | ✅ restored in 1.2.0 – combined or one panel per port                                                                                                        |
 | Send table          | Commands with pauses, loop                                                                        | ✅                                                                                                                                                           |
 | Frame parser        | Header, length field, CRC, footer, statistics                                                     | ✅                                                                                                                                                           |
 | Settings            | Language, theme                                                                                   | ✅                                                                                                                                                           |
-| Settings            | Configurable presets and log paths                                                                | ⚠️ data in the application folder; exports and logs ask for a path                                                                                           |
+| Settings            | Configurable presets and log paths                                                                | ✅ restored in 1.2.0 – folder for commands/sequences and for logs/exports                                                                                    |
 | Legacy data         | Settings, presets, automation                                                                     | ✅ including CRC/header/footer/periodic settings from `serial_monitor_settings.json`                                                                         |
 | Licensing           | Licence manager, licence server, admin tools                                                      | ➖ intentionally not migrated – the application is MIT-licensed                                                                                              |
 | Build tools         | Build studio, installer builder, NSIS/deb/flatpak scripts                                         | ➖ replaced by electron-builder and GitHub Actions                                                                                                           |
 
-✅ available · ⚠️ different or partial – listed as follow-up below · ➖ intentionally not migrated
+✅ available · ➖ intentionally not migrated – no function of the CustomTkinter edition is missing any more
 
 ## Recommended order of remaining work
 
@@ -48,9 +48,8 @@ function of that edition and its state here.
 | -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | 1        | Long-run and hardware acceptance     | Simulators and mock drivers cannot measure a real adapter's buffers, flow signals or reset behaviour – including periodic sending, triggers and the bridge with real devices.         | Complete the [test checklist](LONG_RUN_TEST_CHECKLIST.md) with measured rates, loss counts, memory trend and a saved report.              |
 | 2        | Raw capture and deterministic replay | TXT/CSV export and simulated tests exist; there is no timestamped binary session format and replay runner.                                                                            | Versioned capture with exact bytes, direction and timing; anonymized hardware fixtures replayed in CI.                                    |
-| 3        | Remaining parity items (⚠️ above)    | Sequence-mode presets, per-channel graph patterns, per-port views, a packet-details pane, configurable paths.                                                                         | Decide per item with the owner whether it is still needed; implement with unit and Electron tests.                                        |
-| 4        | Small, headless CLI                  | See below.                                                                                                                                                                            | Offline commands first, with a documented exit-code contract.                                                                             |
-| 5        | Distribution assurance               | Native runtime tests cover the host architecture; cross-built Windows ARM and Linux ARM archives do not all receive an install/run test. Signing/notarization credentials are absent. | Real/native-VM smoke tests per supported package; optional signed Windows and notarized macOS distribution when credentials are supplied. |
+| 3        | Small, headless CLI                  | See below.                                                                                                                                                                            | Offline commands first, with a documented exit-code contract.                                                                             |
+| 4        | Distribution assurance               | Native runtime tests cover the host architecture; cross-built Windows ARM and Linux ARM archives do not all receive an install/run test. Signing/notarization credentials are absent. | Real/native-VM smoke tests per supported package; optional signed Windows and notarized macOS distribution when credentials are supplied. |
 
 ## CLI recommendation
 
@@ -58,7 +57,7 @@ A command-line interface is **worth having, in a small form**. It is useful for 
 fixtures and scripted byte verification – for example to compute the exact CRC packet a test script
 must send, or to decode a captured telegram in a pipeline. It should be a small Node.js entry point
 that reuses `src/shared/core` (the same CRC, framing and decoder code the application uses), not a
-second implementation, and not a replacement for the desktop application. No CLI is part of 1.1.0.
+second implementation, and not a replacement for the desktop application. No CLI is part of 1.2.0.
 
 Suggested staged interface (design examples, **not available commands**):
 

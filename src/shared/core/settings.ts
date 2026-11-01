@@ -15,7 +15,7 @@ import { isDataFormat, type DataFormat } from './format';
 import type { LengthCounts } from './frames';
 import { TIMESTAMP_FORMATS, type TimestampFormat } from './timestamp';
 import { DEFAULT_TRANSMIT_CRC, type TransmitCrcConfig } from './transmit-crc';
-import type { ExtractMode } from './values';
+import { COLOR_PATTERN, EXTRACT_MODES, type ExtractMode, type GraphChannel } from './values';
 
 export const BAUD_RATES = [
   300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 74880, 115200, 230400, 250000, 460800, 500000,
@@ -59,6 +59,10 @@ export interface GraphConfig {
   mode: ExtractMode;
   separator: ',' | ';' | ' ' | '\t';
   points: number;
+  /** Channels of the detection mode "own patterns" (regular expressions). */
+  channels: GraphChannel[];
+  /** Colours chosen for curves of the other modes, by curve name. */
+  colors: Record<string, string>;
 }
 
 export interface Settings {
@@ -114,6 +118,8 @@ export interface Settings {
   /** Automation: responses to received patterns and timed sends. */
   triggers: Trigger[];
   schedules: Schedule[];
+  /** Folders chosen by the user ('' = default): commands/automation and logs/exports. */
+  paths: { dataDir: string; logDir: string };
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
@@ -161,12 +167,13 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze<Settings>({
     crcBigEndian: true,
     fixedLength: 0,
   },
-  graph: { mode: 'auto', separator: ',', points: 500 },
+  graph: { mode: 'auto', separator: ',', points: 500, channels: [], colors: {} },
   fileSend: { mode: 'blocks', blockSize: 64, pauseMs: 10 },
   transmitCrc: { ...DEFAULT_TRANSMIT_CRC },
   periodicMs: 1000,
   triggers: [],
   schedules: [],
+  paths: { dataDir: '', logDir: '' },
 });
 
 type Dict = Record<string, unknown>;
@@ -241,9 +248,24 @@ export function normalizeSettings(raw: unknown): Settings {
       fixedLength: int(f.fixedLength, D.frame.fixedLength, 0, 4096),
     },
     graph: {
-      mode: oneOf(['auto', 'labeled', 'separated'] as const, g.mode, D.graph.mode),
+      mode: oneOf(EXTRACT_MODES, g.mode, D.graph.mode),
       separator: oneOf([',', ';', ' ', '\t'] as const, g.separator, D.graph.separator),
       points: int(g.points, D.graph.points, 50, 5000),
+      channels: (Array.isArray(g.channels) ? g.channels : []).slice(0, 16).map((value) => {
+        const c = asDict(value);
+        return {
+          name: str(c.name, ''),
+          pattern: str(c.pattern, ''),
+          color: COLOR_PATTERN.test(String(c.color)) ? String(c.color) : '#3b82f6',
+          enabled: bool(c.enabled, true),
+        };
+      }),
+      colors: Object.fromEntries(
+        Object.entries(asDict(g.colors))
+          .filter(([, v]) => COLOR_PATTERN.test(String(v)))
+          .slice(0, 64)
+          .map(([k, v]) => [k, String(v)]),
+      ),
     },
     fileSend: {
       mode: oneOf(['blocks', 'lines'] as const, fs.mode, D.fileSend.mode),
@@ -269,6 +291,10 @@ export function normalizeSettings(raw: unknown): Settings {
     periodicMs: int(s.periodicMs, D.periodicMs, PERIODIC_MIN_MS, PERIODIC_MAX_MS),
     triggers: normalizeList(s.triggers, normalizeTrigger),
     schedules: normalizeList(s.schedules, normalizeSchedule),
+    paths: {
+      dataDir: str(asDict(s.paths).dataDir, '').trim(),
+      logDir: str(asDict(s.paths).logDir, '').trim(),
+    },
   };
 }
 
@@ -327,6 +353,8 @@ export function migrateLegacySettings(raw: unknown): Settings {
       includeFooter: s.crc_include_footer,
     },
     periodicMs: s.periodic_ms,
+    // Python "log_path"; its "presets_path" held Python files and is only used for the import.
+    paths: { logDir: s.log_path },
   });
 }
 

@@ -2,7 +2,7 @@
 
 import { formatCount, t } from '@shared/i18n';
 import { StreamAssembler } from '@shared/core/assembler';
-import { commandBytes, type Command, type Newline } from '@shared/core/commands';
+import { commandParts, type Command, type CommandPart, type Newline } from '@shared/core/commands';
 import { monitorSendBytes } from '@shared/core/transmit-crc';
 import { sendPieces, type FileSendMode } from '@shared/core/filesend';
 import { InputError, type DataFormat } from '@shared/core/format';
@@ -539,9 +539,9 @@ export async function sendCommand(cmd: Command, quiet = false): Promise<boolean>
     if (!quiet) await alertDialog(t('error.notConnectedTitle'), t('error.notConnected'), 'warn');
     return false;
   }
-  let data: Uint8Array;
+  let parts: CommandPart[];
   try {
-    data = commandBytes(cmd, appStore.get().settings.transmitCrc);
+    parts = commandParts(cmd, appStore.get().settings.transmitCrc);
   } catch (err) {
     if (!quiet) {
       const message = err instanceof Error ? err.message : String(err);
@@ -553,8 +553,25 @@ export async function sendCommand(cmd: Command, quiet = false): Promise<boolean>
     }
     return false;
   }
-  if (!data.length) return false;
-  return write(data, cmd.fmt, cmd.name, !quiet);
+  if (!parts.some((p) => p.data.length)) return false;
+  return writeParts(parts, cmd.fmt, cmd.name, !quiet);
+}
+
+/** Writes the parts of a command (sequence steps) with their pauses. */
+async function writeParts(
+  parts: readonly CommandPart[],
+  fmt: DataFormat,
+  label: string | undefined,
+  manual: boolean,
+  alive: () => boolean = () => true,
+): Promise<boolean> {
+  for (const part of parts) {
+    if (!alive()) return false;
+    if (part.data.length && !(await write(part.data, fmt, label, manual))) return false;
+    if (part.pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, part.pauseMs));
+    if (!isConnected()) return false;
+  }
+  return true;
 }
 
 // ── Periodic sending (Monitor input or a preset) ─────────────────────────────
@@ -563,8 +580,8 @@ export type PeriodicStop = 'manual' | 'disconnected' | 'invalid' | 'empty' | 'fa
 export interface PeriodicSource {
   /** Name shown in the Monitor and status line. */
   label: string;
-  /** Bytes for the next send – read anew every time; throws for invalid input. */
-  next: () => { data: Uint8Array; fmt: DataFormat; label?: string };
+  /** Writes of the next round – read anew every time; throws for invalid input. */
+  next: () => { parts: CommandPart[]; fmt: DataFormat; label?: string };
   /** Pause after each completed write. */
   intervalMs: () => number;
 }
@@ -602,18 +619,22 @@ export async function startPeriodic(source: PeriodicSource): Promise<boolean> {
   const tick = async (): Promise<void> => {
     periodicTimer = null;
     if (run !== periodicRun) return;
-    let next: { data: Uint8Array; fmt: DataFormat; label?: string };
+    let next: { parts: CommandPart[]; fmt: DataFormat; label?: string };
     try {
       next = source.next();
     } catch (err) {
       stopPeriodic('invalid', err instanceof Error ? err.message : String(err));
       return;
     }
-    if (!next.data.length) {
+    if (!next.parts.some((p) => p.data.length)) {
       stopPeriodic('empty');
       return;
     }
-    if (!isConnected() || !(await write(next.data, next.fmt, next.label))) {
+    const ok =
+      isConnected() &&
+      (await writeParts(next.parts, next.fmt, next.label, false, () => run === periodicRun));
+    if (run !== periodicRun) return;
+    if (!ok) {
       stopPeriodic(isConnected() ? 'failed' : 'disconnected');
       return;
     }

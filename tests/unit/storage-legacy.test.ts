@@ -66,6 +66,24 @@ describe('import of the former Python version', () => {
     });
   });
 
+  it('takes over the presets of the CustomTkinter version, also from its own preset folder', async () => {
+    writeFileSync(join(legacy, 'serial_presets.json'), JSON.stringify([{ name: 'CTK' }]));
+    expect(await store.load('commands')).toEqual([{ name: 'CTK' }]);
+    const custom = mkdtempSync(join(tmpdir(), 'smp-ctk-presets-'));
+    writeFileSync(join(custom, 'serial_presets.json'), JSON.stringify([{ name: 'Custom' }]));
+    writeFileSync(
+      join(legacy, 'serial_monitor_settings.json'),
+      JSON.stringify({ presets_path: custom }),
+    );
+    expect(await store.load('commands')).toEqual([{ name: 'Custom' }]);
+  });
+
+  it('prefers the PySide presets file', async () => {
+    writeFileSync(join(legacy, 'serial_presets.json'), JSON.stringify([{ name: 'CTK' }]));
+    writeFileSync(join(legacy, 'presets.json'), JSON.stringify([{ name: 'PySide' }]));
+    expect(await store.load('commands')).toEqual([{ name: 'PySide' }]);
+  });
+
   it('takes over presets as commands and automation as it is', async () => {
     writeFileSync(join(legacy, 'presets.json'), JSON.stringify([{ name: 'Ping' }]));
     writeFileSync(join(legacy, 'automation.json'), JSON.stringify([{ type: 'note' }]));

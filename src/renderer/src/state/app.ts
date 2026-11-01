@@ -173,21 +173,48 @@ export function setBusy(tab: TabId, busy: boolean): void {
   appStore.set({ busyTabs: busy ? [...current, tab] : current.filter((t) => t !== tab) });
 }
 
-export async function initApp(): Promise<void> {
-  const [info, rawSettings, rawCommands, rawSteps] = await Promise.all([
-    window.smp.app.info(),
-    window.smp.store.load('settings'),
+/** Loads commands and automation steps from the current data folder. */
+async function loadData(): Promise<Pick<AppState, 'commands' | 'steps'>> {
+  const [rawCommands, rawSteps] = await Promise.all([
     window.smp.store.load('commands'),
     window.smp.store.load('automation'),
   ]);
-  const settings = normalizeSettings(rawSettings ?? {});
-  if (info.simulatorForced) settings.simulator = true;
-  appStore.set({
-    info,
-    settings,
+  return {
     commands: Array.isArray(rawCommands) ? rawCommands.map(normalizeCommand) : [],
     steps: Array.isArray(rawSteps) ? rawSteps.map(normalizeStep) : [],
-  });
+  };
+}
+
+/**
+ * Applies the folders of the settings in the main process. When the data
+ * folder changes, pending saves go to the old folder first, then commands and
+ * automation are read from the new one (missing files were copied there).
+ */
+export async function applyPaths(folders: Settings['paths']): Promise<boolean> {
+  await flushPersistence();
+  const { applied, paths } = await window.smp.app.setPaths(folders);
+  const info = appStore.get().info;
+  appStore.set({ ...(info ? { info: { ...info, paths } } : {}), ...(await loadData()) });
+  const s = appStore.get().settings;
+  if (applied.dataDir !== s.paths.dataDir || applied.logDir !== s.paths.logDir) {
+    appStore.set({ settings: { ...s, paths: applied } });
+    persist('settings', () => appStore.get().settings);
+    return false;
+  }
+  return true;
+}
+
+export async function initApp(): Promise<void> {
+  const [info, rawSettings] = await Promise.all([
+    window.smp.app.info(),
+    window.smp.store.load('settings'),
+  ]);
+  const settings = normalizeSettings(rawSettings ?? {});
+  if (info.simulatorForced) settings.simulator = true;
+  // The folders decide where commands and automation are read from.
+  const { applied, paths } = await window.smp.app.setPaths(settings.paths);
+  settings.paths = applied;
+  appStore.set({ info: { ...info, paths }, settings, ...(await loadData()) });
   applyLanguage(settings);
   applyTheme(settings);
   appStore.set({ ready: true });

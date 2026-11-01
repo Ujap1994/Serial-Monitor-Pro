@@ -86,6 +86,21 @@ export interface ReleaseInfo {
   prerelease: boolean;
 }
 
+export interface StoragePaths {
+  userData: string;
+  settings: string;
+  commands: string;
+  automation: string;
+  /** Default folder of save dialogs and stop captures. */
+  logs: string;
+}
+
+/** Folders chosen in the settings ('' = default). */
+export interface FolderSettings {
+  dataDir: string;
+  logDir: string;
+}
+
 export interface AppInfo {
   name: string;
   version: string;
@@ -97,7 +112,7 @@ export interface AppInfo {
   locale: string;
   /** Simulator forced on via --simulator / SMP_SIMULATOR=1 */
   simulatorForced: boolean;
-  paths: { userData: string; settings: string; commands: string; automation: string };
+  paths: StoragePaths;
   /** Linux group that grants access to serial ports (dialout, uucp …). */
   serialGroup: string | null;
   repository: string;
@@ -146,6 +161,8 @@ export interface SmpApi {
      * Returns the path, or null when the file could not be written.
      */
     saveAuto(name: string, content: string): Promise<string | null>;
+    /** Folder dialog; null when cancelled. */
+    chooseFolder(current: string, title: string): Promise<string | null>;
     openText(filters: FileFilter[]): Promise<{ path: string; content: string } | null>;
     /** null = cancelled; a failure for unreadable or too large files. */
     openBinary(maxBytes: number): Promise<ValueResult<BinaryFile> | null>;
@@ -156,6 +173,11 @@ export interface SmpApi {
     stop(): Promise<void>;
   };
   app: {
+    /**
+     * Applies the folders of the settings. Invalid folders are ignored; the
+     * result says which ones are in effect and where the files now are.
+     */
+    setPaths(folders: FolderSettings): Promise<{ applied: FolderSettings; paths: StoragePaths }>;
     info(): Promise<AppInfo>;
     setTheme(theme: Theme): void;
     setLanguage(language: Language): void;
@@ -182,6 +204,8 @@ export const IPC = {
   storeSave: 'store:save',
   fileSave: 'file:save',
   fileSaveAuto: 'file:save-auto',
+  fileChooseFolder: 'file:choose-folder',
+  appSetPaths: 'app:set-paths',
   fileOpen: 'file:open',
   fileOpenBinary: 'file:open-binary',
   logStart: 'log:start',

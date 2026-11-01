@@ -11,11 +11,11 @@
 // are drawn into the page before each shot; the user guide refers to them.
 // With pngquant installed, the images are compressed afterwards.
 
-/* global document, innerWidth, innerHeight -- drawMarkers() and the cleanup run in the page */
+/* global document, innerWidth, innerHeight, NodeFilter -- drawMarkers(), the cleanup and the anonymisation run in the page */
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from '@playwright/test';
@@ -41,11 +41,12 @@ function messages(lang) {
   };
 }
 
-const [PING, INFO, MODBUS, RESTART] = [
+const [PING, INFO, MODBUS, RESTART, WAKE] = [
   'AT – ping',
   'Device info',
   'Modbus: read 10 registers',
   'Restart',
+  'Wake-up sequence',
 ];
 const COMMANDS = [
   { name: PING, data: 'AT', fmt: 'ASCII', newline: 'CRLF', delayMs: 400, enabled: true },
@@ -62,6 +63,20 @@ const COMMANDS = [
     description: 'Reads holding registers 0–9 of slave 1; the CRC is appended automatically.',
   },
   { name: RESTART, data: 'AT+RST', fmt: 'ASCII', newline: 'CRLF', delayMs: 1000, enabled: false },
+  {
+    name: WAKE,
+    fmt: 'ASCII',
+    newline: 'CRLF',
+    delayMs: 300,
+    enabled: false,
+    description: 'Wakes the device, then asks for its identity and status.',
+    sequence: true,
+    steps: [
+      { data: 'AT', fmt: 'ASCII', pauseMs: 300 },
+      { data: 'ATI', fmt: 'ASCII', pauseMs: 300 },
+      { data: 'STATUS?', fmt: 'ASCII', pauseMs: 0 },
+    ],
+  },
 ];
 
 // Automation examples for the trigger and scheduler pictures.
@@ -129,8 +144,13 @@ async function start({ theme = 'light', settings = {} } = {}) {
   );
   await page.getByTestId('tab-monitor').waitFor();
   await page.waitForTimeout(400);
+  profiles.set(app, profile);
   return { app, page };
 }
+
+const profiles = new WeakMap();
+/** The temporary profile folder of a running app (to anonymise paths in pictures). */
+const profileOf = (app) => profiles.get(app);
 
 const menu = (app, action) =>
   app.evaluate(
@@ -321,6 +341,20 @@ async function guide() {
       $('command-save'),
     ]);
     await page.keyboard.press('Escape');
+
+    await $('preset-list').getByText(WAKE).click();
+    await button(presets, m('common.edit')).click();
+    await editor.waitFor();
+    await shot(page, file('command-sequence'), [
+      editor.locator('label', { has: $('command-sequence') }),
+      editor.locator('.steps-head'),
+      editor.locator('.steps-row select'),
+      editor.locator('.steps-row input.mono'),
+      editor.locator('.steps-row input[type="number"]'),
+      $('command-step-add'),
+    ]);
+    await page.keyboard.press('Escape');
+    await $('preset-list').getByText(MODBUS).click();
 
     await $('tab-sendtable').click();
     const sendtable = $('page-sendtable');
@@ -537,6 +571,23 @@ async function guide() {
       $('graph-canvas'),
     ]);
 
+    // Own patterns (regular expressions) with chosen colours.
+    await $('graph-stats-toggle').uncheck();
+    await button(graph, m('graph.clear')).click();
+    await $('graph-mode').selectOption('regex');
+    await page.waitForTimeout(6000);
+    await shot(page, file('graph-channels'), [
+      field(graph, m('graph.detection')),
+      graph.locator('.channel-row input[type="checkbox"]'),
+      graph.locator('.channel-row input[type="color"]'),
+      $('graph-channel-name-0'),
+      $('graph-channel-pattern-0'),
+      $('graph-channel-add'),
+      { target: graph.locator('.legend-item input[type="color"]'), at: 'bl' },
+      $('graph-canvas'),
+    ]);
+    await $('graph-mode').selectOption('auto');
+
     await $('tab-monitor').click();
     await $('connect-button').click();
     await menu(app, 'baud-scan');
@@ -557,6 +608,25 @@ async function guide() {
       file('settings'),
       [0, 1, 2, 3, 4].map((i) => sections.nth(i)),
     );
+    await $('storage-paths').scrollIntoViewIfNeeded();
+    // Anonymous documentation: typical locations instead of this computer's paths.
+    await $('settings-dialog').evaluate(
+      (dialog, { profile, home }) => {
+        const walker = document.createTreeWalker(dialog, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          node.textContent = node.textContent
+            .replaceAll(profile, '~/Library/Application Support/Serial Monitor Pro')
+            .replaceAll(home, '~');
+        }
+      },
+      { profile: profileOf(app), home: homedir() },
+    );
+    await shot(page, file('settings-storage'), [
+      $('folder-dataDir'),
+      $('folder-logDir'),
+      [$('folder-dataDir-choose'), $('folder-logDir-choose')],
+      $('storage-paths'),
+    ]);
     await page.keyboard.press('Escape');
 
     await menu(app, 'about');
@@ -596,6 +666,7 @@ async function guide() {
       { target: $('protocol-stats'), at: 'bl' },
       { target: [$('protocol-export'), button(protocol, m('common.clearOutput'))], at: 'tr' },
       $('protocol-output'),
+      { target: $('protocol-details'), at: 'tr' },
     ]);
     await button(protocol, m('common.clearOutput')).click();
     await $('protocol-select').selectOption('nmea');
@@ -666,6 +737,12 @@ async function guide() {
       { target: button(multiport, m('common.clearOutput')), at: 'tr' },
     ]);
     await $('bridge-on').uncheck();
+    await $('multiport-view-separate').click();
+    await page.waitForTimeout(2500);
+    await shot(page, file('multiport-separate'), [
+      { target: page.locator('.card-title .segmented'), at: 'tr' },
+      $('multiport-separate'),
+    ]);
     await app.close();
   }
 

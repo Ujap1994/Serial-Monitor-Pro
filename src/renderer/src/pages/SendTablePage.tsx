@@ -144,7 +144,13 @@ export function SendTablePage(): ReactNode {
                       <span className="badge">{c.fmt}</span>
                       {c.addCrc && <span className="badge badge-crc">+CRC</span>}
                     </td>
-                    <td className="data">{c.data}</td>
+                    <td className="data">
+                      {c.sequence
+                        ? `${t('command.stepsCount', { count: c.steps.length })}: ${c.steps
+                            .map((s) => s.data)
+                            .join(' · ')}`
+                        : c.data}
+                    </td>
                     <td>{t(`newline.${c.newline}`)}</td>
                     <td className="mono">{c.delayMs} ms</td>
                   </tr>

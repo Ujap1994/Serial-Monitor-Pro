@@ -7,11 +7,12 @@ not an atomic lock: check with the active agent before overlapping work.
 
 ## Active work — 2026-10-31
 
-| Owner       | Status                                  | Scope / files                                                                                                                                    | Next handoff                                                      |
-| ----------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Codex       | Local validation complete               | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
-| Claude Code | Done – merged to `main`, release v1.1.0 | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
-| Claude Code | Draft integrated by Codex               | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
+| Owner       | Status                                                                                                                                            | Scope / files                                                                                                                                    | Next handoff                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Codex       | Local validation complete                                                                                                                         | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
+| Claude Code | Done – 1.2.0 on `main`: sequence presets, graph regex channels/colours, multi-port separate view, decoder detail pane, configurable storage paths | Presets/commands core, graph, multi-port, protocol, settings/storage (main+renderer), tests, docs, release                                       | Commit on `main`, CI and release links below                      |
+| Claude Code | Done – merged to `main`, release v1.1.0                                                                                                           | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
+| Claude Code | Draft integrated by Codex                                                                                                                         | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
 
 Working branch: `codex/crc-transmit`, starting at `48920f1` (1.0.2).
 The original tracked diff is backed up locally at `/private/tmp/smp-before-codex.patch`.
@@ -70,3 +71,15 @@ Published: CI on `main` (`da513e9`) passed on Linux, Windows and macOS –
 https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41251568652. Release workflow passed –
 https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41251988922. Release with 24 packages and
 SHA256SUMS: https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v1.1.0
+
+## Claude Code handoff — 2026-11-01 (1.2.0, merged to `main`, tag `v1.2.0`)
+
+Owner request: close the remaining Python parity items. Sequence-mode presets (step editor, sending
+with pauses, Python import incl. the `format` field fix and `serial_presets.json`), graph channels
+with own regular expressions and colours, multi-port separate view, decoder packet list with a
+details pane, folders for commands/sequences and logs/exports (copy-if-missing, validation in main).
+
+Checks run locally (macOS): `npm run check` passed – 1139 unit/integration tests (16 hardware
+skipped), coverage statements 94.78 % / branches 85.92 % / functions 95.84 % / lines 96.78 %,
+55 Electron E2E tests (3 hardware skipped). Screenshots regenerated (34) and inspected; the storage
+picture is anonymised. No physical port was opened.

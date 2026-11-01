@@ -32,6 +32,7 @@ const api: SmpApi = {
     saveText: (defaultName, content, filters) =>
       ipcRenderer.invoke(IPC.fileSave, defaultName, content, filters),
     saveAuto: (name, content) => ipcRenderer.invoke(IPC.fileSaveAuto, name, content),
+    chooseFolder: (current, title) => ipcRenderer.invoke(IPC.fileChooseFolder, current, title),
     openText: (filters) => ipcRenderer.invoke(IPC.fileOpen, filters),
     openBinary: (maxBytes) => ipcRenderer.invoke(IPC.fileOpenBinary, maxBytes),
   },
@@ -41,6 +42,7 @@ const api: SmpApi = {
     stop: () => ipcRenderer.invoke(IPC.logStop),
   },
   app: {
+    setPaths: (folders) => ipcRenderer.invoke(IPC.appSetPaths, folders),
     onCloseRequested: (listener) => subscribe<void>(IPC.appCloseRequested, listener),
     closeReady: () => ipcRenderer.send(IPC.appCloseReady),
     info: () => ipcRenderer.invoke(IPC.appInfo),

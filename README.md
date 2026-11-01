@@ -54,15 +54,15 @@ Ten tools in one window – free and open source. The interface is available in 
 |     | Tool                    | What it does                                                                                                                                                                                                                                                                          |
 | --- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🖥️  | **Monitor**             | ASCII / HEX / DEC / BIN, timestamps, Δt between lines, hex dump, UTF-8, visible `\r\n`, filter with highlighting, log to file, export to TXT and CSV. Sending with automatic **CRC**, **header and footer** and **periodic** repetition, with a byte-exact preview.                   |
-| 📋  | **Presets / Sequences** | Store frequently used commands once – with optional **appended CRC**, description and own periodic interval – and send them with one click from the quick panel. Import/export as JSON.                                                                                               |
+| 📋  | **Presets / Sequences** | Store frequently used commands once – with optional **appended CRC**, description, own periodic interval and **sequence mode** (steps with pauses) – and send them with one click from the quick panel. Import/export as JSON.                                                        |
 | 🛡️  | **CRC tools**           | 11 algorithms (CRC-8, -8/MAXIM, -8/SAE-J1850, -16/IBM, -16/MODBUS, -16/CCITT-False, -16/XMODEM, -16/USB, -32, -32/BZIP2, -32C) – verified against the official check values. Transmit settings (byte order, signed position, header/footer in the CRC) and an independent calculator. |
 | ⛔  | **Stop condition**      | End a recording automatically when a pattern appears, after _n_ bytes / lines or after a time – log only, pause the display or save the log as CSV, optionally disconnect.                                                                                                            |
-| 🔤  | **Protocol decoder**    | Modbus RTU and Modbus ASCII (requests, responses, exceptions, writes) and NMEA 0183 (GGA, RMC, …) with checksum verification – live or from a test input, with statistics and CSV export.                                                                                             |
+| 🔤  | **Protocol decoder**    | Modbus RTU and Modbus ASCII (requests, responses, exceptions, writes) and NMEA 0183 (GGA, RMC, …) with checksum verification – live or from a test input, with a packet list, **packet details**, statistics and CSV export.                                                          |
 | 🤖  | **Automation**          | Sequences of _send_, _wait_, _expect response_ and _note_ steps, **macro recording** of manual sends, **triggers** that answer received patterns and a **scheduler** for timed sends.                                                                                                 |
-| 🔌  | **Multi-port**          | Listen to up to four additional ports in parallel, colour-coded in one view, with byte counters and a **bridge** that forwards data between two ports.                                                                                                                                |
+| 🔌  | **Multi-port**          | Listen to up to four additional ports in parallel, colour-coded in one view or **one panel per port**, with byte counters and a **bridge** that forwards data between two ports.                                                                                                      |
 | 📑  | **Send table**          | Process the stored commands one after another with individual pauses.                                                                                                                                                                                                                 |
 | 🧩  | **Frame parser**        | Describe your own telegram (header, length field, payload, CRC, footer) – received data is split and verified continuously.                                                                                                                                                           |
-| 📈  | **Live graph**          | Extracts numbers from lines such as `Temp:23.5, Pressure:1013` or `1.5;2.5;3.5`, plots them, shows statistics (min, max, mean, std. dev., median) and exports CSV.                                                                                                                    |
+| 📈  | **Live graph**          | Extracts numbers from lines such as `Temp:23.5, Pressure:1013` or `1.5;2.5;3.5`, or with **own regular expressions per channel**, plots them in **chosen colours**, shows statistics (min, max, mean, std. dev., median) and exports CSV.                                             |
 | 🔎  | **Baud rate scanner**   | Listens on all common baud rates and picks the one with readable text.                                                                                                                                                                                                                |
 | ♻️  | **Auto-reconnect**      | Reconnects automatically when a device is unplugged and plugged in again (e.g. after a reset).                                                                                                                                                                                        |
 
@@ -306,6 +306,27 @@ The filter only hides lines; nothing is deleted and the export still contains ev
 9. **Will be sent** – live preview of the bytes; invalid input is reported here before saving.
 10. **Save.**
 
+#### Sequence mode – a command chain
+
+A command in **sequence mode** (as in the former Python version) sends several steps one after
+another, each followed by its own pause – for example _wake up_ → _identify_ → _status_. In the lists
+it is marked with the number of steps (`3 steps`, quick panel `SEQ 3`).
+
+![Command editor in sequence mode with numbered markers](docs/images/guide/command-sequence.png)
+
+1. **Sequence mode** – switches the editor from one data field to a list of steps. Data already typed
+   becomes the first step.
+2. **Steps** – sent from top to bottom.
+3. **Format** of each step – ASCII, HEX, DEC or BIN; steps may mix formats.
+4. **Data** of the step.
+5. **Pause** after the step in milliseconds (0 – 600 000).
+6. **Add step**; the bin icon removes a step.
+
+The command's **line end** and **Append CRC** apply to every step. _Will be sent_ shows the number of
+steps and all bytes together. A sequence can be sent once, periodically (the whole chain, then the
+periodic interval) and as part of the send table. Sequence presets of the Python version
+(`is_sequence`, `steps` with `pause_ms`) are imported with their steps.
+
 ### 4. Send table – commands one after another
 
 ![Send table with numbered markers](docs/images/guide/sendtable.png)
@@ -420,7 +441,8 @@ A trigger fires at most once per received packet. Triggers react to the Monitor 
    - **Pause receiving** – the Monitor display freezes at the stop point. Data is still counted but
      not shown until you click **Resume display** (here or in the banner of the Monitor).
    - **Pause and save log** – pauses and saves the whole Monitor content as CSV, without a dialog,
-     to `Documents/Serial Monitor Pro/stop_capture_<date>_<time>.csv`. The path is written to the
+     as `stop_capture_<date>_<time>.csv` in the log folder of the
+     [settings](#13-settings) (default `Documents/Serial Monitor Pro`). The path is written to the
      history and the Monitor.
 4. **Also close the connection** – disconnects when the condition is met, so nothing else is recorded.
 5. **Start watching / Stop watching.**
@@ -446,7 +468,12 @@ later find the recording ending exactly at the event.
 7. **Statistics** – total, valid and invalid packets and the success rate.
 8. **Export … / Clear output** – the export saves every decoded packet as CSV (time, protocol, valid,
    raw data, decoded text); clearing also resets the statistics.
-9. **Output** – one line per telegram; invalid ones in red.
+9. **Packet list** – one row per telegram with time, ✓/✗ and the decoded text; invalid ones in red.
+   Click a row to see its details. The list follows new packets unless you scroll up.
+10. **Packet details** (as in the former Python version) – protocol, valid/invalid, time, every
+    decoded field on its own line, and the raw data: Modbus RTU as hex bytes with offsets, NMEA and
+    Modbus ASCII as the received line. A telegram decoded by hand is selected automatically; invalid
+    hex input is explained above the input field.
 
 **Modbus RTU** shows the slave address, the function with its name, requests (start address and
 quantity), responses (register values or bytes), single and multiple writes, exception responses
@@ -461,7 +488,7 @@ LRC – the two's complement of the byte sum – is checked. Live decoding reads
 
 1. **NMEA 0183** selected.
 2. **Continuous decoding** switched on.
-3. **Output** – sentence type with its meaning, talker, number of fields, the most important values
+3. **Packet list** – sentence type with its meaning, talker, number of fields, the most important values
    (time, position, satellites, altitude, speed, validity) and whether the checksum after `*` is correct.
    Known types: GGA, RMC, GSA, GSV, VTG, GLL, ZDA; other sentences are shown with their number of
    fields. Sentences without a checksum count as valid.
@@ -640,6 +667,26 @@ _All 11 algorithms for the same data at once; a click on a row selects that algo
 Recognised numbers: `12`, `-3.5`, `+0.25`, `.5`, `1.5e3`. Values beyond the floating-point range are
 ignored.
 
+#### Own patterns and colours
+
+For data that the automatic detection does not understand, define each curve yourself – the
+channels of the former Python version.
+
+![Live graph with own patterns and colours](docs/images/guide/graph-channels.png)
+
+1. **Detection: own patterns (regex)** – when chosen for the first time, two example channels
+   (Temp, Humidity) are filled in.
+2. **Active** – switches a channel on or off.
+3. **Colour** of the channel.
+4. **Name** – the name of the curve in the legend, statistics and export.
+5. **Pattern** – a regular expression that is searched in every received line. The **first group in
+   brackets** is the value, e.g. `Temp:\s*(-?\d+(?:[.,]\d+)?)`; without brackets the whole match is
+   used. Decimal commas are recognised. An invalid pattern is framed red; hover to see why.
+6. **Add channel** (up to 16); the bin icon removes one.
+7. **Colour in the legend** – a click on the coloured square of a curve chooses its colour. This works
+   in every detection mode; the colours are saved.
+8. **Graph** in the chosen colours.
+
 ### 11. Multi-port – several devices at once
 
 ![Multi-port with numbered markers](docs/images/guide/multiport.png)
@@ -662,6 +709,13 @@ ignored.
 
 Apart from the bridge, multi-port only listens; to send, use the monitor. A port that is open in the
 monitor cannot be opened in a slot at the same time, and vice versa.
+
+![Multi-port with a separate view per port](docs/images/guide/multiport-separate.png)
+
+1. **Combined / Separate** – the view of the former Python version: all ports in one colour-coded
+   list, or one panel per port.
+2. **Panels** – port number and name, byte counters and the received lines of that port only. Both
+   views are filled all the time, so switching never loses lines; _Clear output_ empties both.
 
 ### 12. Baud rate scanner
 
@@ -698,9 +752,23 @@ Available while disconnected: click **Scan** in the toolbar or choose _Connectio
 |                  | Show sent data in the monitor            | on              | Sent data appears as `→` lines.                                                                                |
 | **5 Connection** | Reconnect automatically                  | off             | When a device disappears (unplugged, reset), the application waits and reconnects as soon as the port is back. |
 |                  | Show simulated test devices              | off             | Adds the five [simulated devices](#14-simulated-test-devices) to all port lists.                               |
-| _Storage_        | –                                        |                 | Shows where settings, commands and sequences are stored (scroll down in the dialog).                           |
+| _Storage_        | Folders                                  | default         | See below (scroll down in the dialog).                                                                         |
 
-**Reset to defaults** restores all settings; stored commands and sequences are not affected.
+**Reset to defaults** restores all settings; stored commands, sequences, triggers, schedules and the
+chosen folders are not affected.
+
+![Storage folders in the settings](docs/images/guide/settings-storage.png)
+
+1. **Folder for commands and sequences** – the _preset save path_ of the former Python version, e.g.
+   a shared team folder or a synchronised drive. When you change it, files that already exist in the
+   new folder are used as they are; missing ones are copied from the current folder, so nothing is
+   lost and nothing is overwritten. The settings themselves always stay in the application folder.
+2. **Folder for logs and exports** – the _log save path_: the start folder of all save dialogs
+   (log to file, TXT/CSV export, graph and decoder export) and the target of the automatic stop
+   captures. Default: `Documents/Serial Monitor Pro`.
+3. **Change … / Default** – choose a folder, or go back to the default. Changes take effect with
+   **Save**; a folder that does not exist (any more) is rejected and the previous one stays in effect.
+4. **Current locations** of all files.
 
 ### 14. Simulated test devices
 
@@ -727,7 +795,10 @@ send format to HEX and the line end to _none_ (an appended `0A` would break the 
 - **Commands** – export and import them as JSON on the _Presets / Sequences_ tab or via the _File_ menu.
 - **Graph and decoder exports** – _Export …_ on the graph and protocol decoder tabs saves CSV files.
 - **Stop captures** – the stop action _Pause and save log_ writes
-  `stop_capture_<date>_<time>.csv` into `Documents/Serial Monitor Pro` without asking.
+  `stop_capture_<date>_<time>.csv` into the log folder (default `Documents/Serial Monitor Pro`)
+  without asking.
+- **Folders** – commands/sequences and logs/exports can be moved to folders of your choice under
+  [Settings → Storage](#13-settings).
 - **Stored data** – settings (including CRC, header/footer, triggers and schedules), commands and
   automation sequences are saved automatically as JSON files
   in the application's data folder; the exact paths are shown at the bottom of the settings.

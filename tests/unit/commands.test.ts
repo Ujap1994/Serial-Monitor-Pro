@@ -118,6 +118,8 @@ describe('commands', () => {
       addCrc: false,
       description: '',
       periodicMs: 1000,
+      sequence: false,
+      steps: [],
     });
   });
 
@@ -137,6 +139,8 @@ describe('commands', () => {
       addCrc: false,
       description: '',
       periodicMs: 1000,
+      sequence: false,
+      steps: [],
     });
   });
 });

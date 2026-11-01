@@ -6,6 +6,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.2.0] – 2026-11-01
+
+Completes the comparison with the former Python (CustomTkinter) version: every function of that
+edition is now available.
+
+### Added
+
+- **Sequence mode for presets**: a command chain of steps, each with its own format, data and pause;
+  the command's line end and _Append CRC_ apply to every step. Sent once, periodically (whole chain)
+  or from the send table. Python presets with `is_sequence` and `steps` are imported with their steps.
+- **Graph channels with own patterns**: detection mode _own patterns (regex)_ with one regular
+  expression, name and colour per channel (the first group is the value; decimal commas accepted),
+  and a colour picker for every curve in the legend. Colours and channels are saved.
+- **Multi-port separate view**: switch between the combined list and one panel per port with its
+  own byte counters; both views stay filled.
+- **Decoder packet details**: the decoded packets are a selectable list; the details pane shows
+  every field, the validity and the raw data (hex with offsets for Modbus RTU).
+- **Storage folders**: a folder for commands and sequences (Python _preset save path_; existing
+  files are used, missing ones copied) and a folder for logs and exports (Python _log save path_):
+  start folder of all save dialogs and target of automatic stop captures. The Python log path is
+  taken over.
+
+### Fixed
+
+- Presets of the former Python versions kept their format: the field `format` was ignored and every
+  imported preset became HEX.
+- Presets of the CustomTkinter version (`serial_presets.json`, also from its own preset folder) are
+  imported on the first start.
+- _Reset to defaults_ in the settings no longer removes triggers, schedules or the chosen folders.
+
+### Tests
+
+- Unit tests for sequence steps and their import, regex channels and stored colours, the data folder
+  (copy, reuse, rejection of unusable folders) and the CustomTkinter preset import.
+- Electron end-to-end tests for sending a sequence preset, the step editor, graph channels and
+  colours, the separate multi-port view, decoder details and the folder settings.
+
 ## [1.1.0] – 2026-11-01
 
 This release restores the transmit and automation functions of the former Python

@@ -57,7 +57,7 @@ function QuickPanel(): ReactNode {
             <SendHorizontal size={13} strokeWidth={2.2} aria-hidden />
             <span className="name">{c.name}</span>
             <span className="fmt">
-              {c.fmt}
+              {c.sequence ? `SEQ ${c.steps.length}` : c.fmt}
               {c.addCrc && ' +CRC'}
             </span>
           </button>
@@ -332,7 +332,8 @@ function SendBar(): ReactNode {
                   next: () => {
                     const { text, fmt, newline } = latest.current;
                     const crcConfig = appStore.get().settings.transmitCrc;
-                    return { data: monitorSendBytes(text, fmt, newline, crcConfig), fmt };
+                    const data = monitorSendBytes(text, fmt, newline, crcConfig);
+                    return { parts: [{ data, pauseMs: 0 }], fmt };
                   },
                   intervalMs: () => appStore.get().settings.periodicMs,
                 });

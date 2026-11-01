@@ -13,9 +13,11 @@ import {
   type BinaryFile,
   type ControlLines,
   type FileFilter,
+  type FolderSettings,
   type MenuAction,
   type OpenOptions,
   type ReleaseInfo,
+  type StoragePaths,
   type StoreName,
   type ValueResult,
 } from '@shared/ipc';
@@ -26,7 +28,7 @@ import { APP_NAME, REPOSITORY_URL } from './constants';
 import { buildMenu } from './menu';
 import { listPorts, SerialManager } from './serial';
 import { simulatedPorts } from './simulator';
-import { Storage } from './storage';
+import { isUsableFolder, Storage } from './storage';
 import { fetchNewerReleases } from './updates';
 import { loadWindowState, trackWindowState } from './window-state';
 
@@ -53,6 +55,19 @@ const pendingSaves = new Set<Promise<boolean>>();
 const saveQueues = new Map<StoreName, Promise<boolean>>();
 
 const storage = new Storage(app.getPath('userData'));
+/** Log/export folder chosen in the settings ('' = Documents). */
+let logDir = '';
+const logFolder = (): string => logDir || app.getPath('documents');
+
+function storagePaths(): StoragePaths {
+  return {
+    userData: app.getPath('userData'),
+    settings: storage.path('settings'),
+    commands: storage.path('commands'),
+    automation: storage.path('automation'),
+    logs: logDir || join(app.getPath('documents'), 'Serial Monitor Pro'),
+  };
+}
 const serial = new SerialManager((event) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.serialEvent, event);
 });
@@ -189,7 +204,7 @@ function registerIpc(): void {
     async (_e, defaultName: string, content: string, filters: FileFilter[]) => {
       if (!mainWindow) return null;
       const result = await dialog.showSaveDialog(mainWindow, {
-        defaultPath: join(app.getPath('documents'), defaultName),
+        defaultPath: join(logFolder(), defaultName),
         filters,
       });
       if (result.canceled || !result.filePath) return null;
@@ -200,7 +215,7 @@ function registerIpc(): void {
   // Unattended captures (stop condition "save"): no dialog, a fixed folder and
   // a sanitised file name – the renderer cannot choose the directory.
   ipcMain.handle(IPC.fileSaveAuto, async (_e, name: string, content: string) => {
-    const dir = process.env.SMP_CAPTURE_DIR || join(app.getPath('documents'), 'Serial Monitor Pro');
+    const dir = process.env.SMP_CAPTURE_DIR || storagePaths().logs;
     const safe =
       basename(String(name))
         .replace(/[^\w.-]/g, '_')
@@ -214,6 +229,26 @@ function registerIpc(): void {
       console.warn('[files] automatic save failed:', err);
       return null;
     }
+  });
+  ipcMain.handle(IPC.fileChooseFolder, async (_e, current: string, title: string) => {
+    if (!mainWindow) return null;
+    const start = String(current ?? '');
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: String(title),
+      defaultPath: start && (await isUsableFolder(start)) ? start : logFolder(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+  // Folders of the settings: data folder for commands/automation and the
+  // log/export folder. Only absolute, existing folders are accepted.
+  ipcMain.handle(IPC.appSetPaths, async (_e, folders: FolderSettings) => {
+    const dataDir = String(folders?.dataDir ?? '').trim();
+    const wantedLog = String(folders?.logDir ?? '').trim();
+    if (!(await storage.setDataDir(dataDir)))
+      console.warn(`[storage] data folder not usable: ${dataDir}`);
+    logDir = (await isUsableFolder(wantedLog)) ? wantedLog : '';
+    return { applied: { dataDir: storage.customDataDir, logDir }, paths: storagePaths() };
   });
   ipcMain.handle(IPC.fileOpen, async (_e, filters: FileFilter[]) => {
     if (!mainWindow) return null;
@@ -253,7 +288,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.logStart, async (_e, defaultName: string) => {
     if (!mainWindow || quitting) return null;
     const result = await dialog.showSaveDialog(mainWindow, {
-      defaultPath: join(app.getPath('documents'), defaultName),
+      defaultPath: join(logFolder(), defaultName),
       filters: [{ name: 'Text', extensions: ['txt', 'log'] }],
     });
     if (result.canceled || !result.filePath || quitting) return null;
@@ -269,7 +304,6 @@ function registerIpc(): void {
   ipcMain.handle(IPC.logStop, () => finishLog());
 
   ipcMain.handle(IPC.appInfo, (): AppInfo => {
-    const ud = app.getPath('userData');
     return {
       name: APP_NAME,
       version: app.getVersion(),
@@ -280,12 +314,7 @@ function registerIpc(): void {
       node: process.versions.node,
       locale: app.getLocale(),
       simulatorForced,
-      paths: {
-        userData: ud,
-        settings: storage.path('settings'),
-        commands: storage.path('commands'),
-        automation: storage.path('automation'),
-      },
+      paths: storagePaths(),
       serialGroup: serialGroup(),
       repository: REPOSITORY_URL,
       updateCheck: process.env.SMP_NO_UPDATE_CHECK !== '1',

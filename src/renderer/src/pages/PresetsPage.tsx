@@ -14,7 +14,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { commandBytes, commandPreview, type Command } from '@shared/core/commands';
+import { commandParts, commandPreview, type Command } from '@shared/core/commands';
 import { Button, Card, Empty, PageHeader } from '../components/ui';
 import { CommandEditor } from '../dialogs/CommandEditor';
 import { useT } from '../lib/i18n';
@@ -143,7 +143,13 @@ export function PresetsPage(): ReactNode {
                 onDoubleClick={() => void sendCommand(c)}
               >
                 <span className="title">{c.name}</span>
-                <span className="badge">{c.fmt}</span>
+                {c.sequence ? (
+                  <span className="badge badge-info">
+                    {t('command.stepsCount', { count: c.steps.length })}
+                  </span>
+                ) : (
+                  <span className="badge">{c.fmt}</span>
+                )}
                 {c.addCrc && <span className="badge badge-crc">+CRC</span>}
                 {!c.enabled && <span className="badge">{t('presets.skipped')}</span>}
               </div>
@@ -160,7 +166,20 @@ export function PresetsPage(): ReactNode {
                 <dt>{t('command.format')}</dt>
                 <dd>{current.fmt}</dd>
                 <dt>{t('command.data')}</dt>
-                <dd className="mono">{current.data || '—'}</dd>
+                <dd className="mono">
+                  {current.sequence ? (
+                    <ol className="step-list" data-testid="preset-steps">
+                      {current.steps.map((s, i) => (
+                        <li key={i}>
+                          [{s.fmt}] {s.data || '—'}
+                          <span className="muted"> → {s.pauseMs} ms</span>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    current.data || '—'
+                  )}
+                </dd>
                 <dt>{t('command.newline')}</dt>
                 <dd>{t(`newline.${current.newline}`)}</dd>
                 <dt>{t('command.delay')}</dt>
@@ -215,7 +234,7 @@ export function PresetsPage(): ReactNode {
                     void startPeriodic({
                       label: cmd.name,
                       next: () => ({
-                        data: commandBytes(cmd, appStore.get().settings.transmitCrc),
+                        parts: commandParts(cmd, appStore.get().settings.transmitCrc),
                         fmt: cmd.fmt,
                         label: cmd.name,
                       }),

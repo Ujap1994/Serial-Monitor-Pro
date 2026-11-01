@@ -1,12 +1,22 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeftRight, Cable, Eraser, Plug, RefreshCw, ScrollText, Unplug } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Cable,
+  Columns2,
+  Eraser,
+  Plug,
+  RefreshCw,
+  ScrollText,
+  Unplug,
+  Rows3,
+} from 'lucide-react';
 import { StreamAssembler } from '@shared/core/assembler';
 import { formatBytes, formatText } from '@shared/core/format';
 import { formatCount } from '@shared/i18n';
 import { BAUD_RATES } from '@shared/core/settings';
 import { formatTimestamp } from '@shared/core/timestamp';
 import { TextLog, type TextLogHandle } from '../components/LogView';
-import { Button, Card, Check, Input, PageHeader, Select } from '../components/ui';
+import { Button, Card, Check, Input, PageHeader, Segmented, Select } from '../components/ui';
 import { useT } from '../lib/i18n';
 import { useLatest } from '../lib/hooks';
 import { useStore } from '../lib/store';
@@ -38,6 +48,10 @@ export function MultiPortPage(): ReactNode {
     })),
   );
   const log = useRef<TextLogHandle>(null);
+  // One output per slot for the separate view (Python: view mode). Both views
+  // are filled all the time, so switching never loses lines.
+  const slotLogs = useRef<(TextLogHandle | null)[]>([]);
+  const [view, setView] = useState<'combined' | 'separate'>('combined');
   const slotsRef = useLatest(slots);
   const assemblers = useRef(
     Array.from({ length: SLOTS }, () => new StreamAssembler('newline', 100)),
@@ -59,11 +73,18 @@ export function MultiPortPage(): ReactNode {
 
   const write = (i: number, text: string): void => {
     const slot = slotsRef.current[i];
+    const time = formatTimestamp(Date.now(), 'time-ms');
     log.current?.append(
-      `[${formatTimestamp(Date.now(), 'time-ms')}] [${slot?.openPath || slot?.path || '?'}] ${text}`,
+      `[${time}] [${slot?.openPath || slot?.path || '?'}] ${text}`,
       'rx',
       SLOT_COLORS[i],
     );
+    slotLogs.current[i]?.append(`[${time}] ${text}`, 'rx');
+  };
+
+  const clearAll = (): void => {
+    log.current?.clear();
+    for (const l of slotLogs.current) l?.clear();
   };
 
   const render = (data: Uint8Array): string => {
@@ -310,22 +331,65 @@ export function MultiPortPage(): ReactNode {
         </div>
       </Card>
       <Card
-        title={t('multiport.combined')}
+        title={view === 'combined' ? t('multiport.combined') : t('multiport.separate')}
         icon={ScrollText}
         fill
         actions={
-          <Button size="sm" variant="ghost" icon={Eraser} onClick={() => log.current?.clear()}>
-            {t('common.clearOutput')}
-          </Button>
+          <>
+            <Segmented
+              value={view}
+              onChange={setView}
+              testId="multiport-view"
+              options={[
+                { value: 'combined', label: t('multiport.viewCombined'), icon: Rows3 },
+                { value: 'separate', label: t('multiport.viewSeparate'), icon: Columns2 },
+              ]}
+            />
+            <Button size="sm" variant="ghost" icon={Eraser} onClick={clearAll}>
+              {t('common.clearOutput')}
+            </Button>
+          </>
         }
       >
-        <TextLog
-          ref={log}
-          maxLines={10000}
-          emptyIcon={Cable}
-          empty={t('multiport.empty')}
-          testId="multiport-output"
-        />
+        <div className="mp-view" hidden={view !== 'combined'}>
+          <TextLog
+            ref={log}
+            maxLines={10000}
+            emptyIcon={Cable}
+            empty={t('multiport.empty')}
+            testId="multiport-output"
+          />
+        </div>
+        <div className="mp-grid" hidden={view !== 'separate'} data-testid="multiport-separate">
+          {slots.map((slot, i) => (
+            <section
+              key={i}
+              className="mp-panel"
+              style={{ ['--slot-color' as string]: SLOT_COLORS[i] }}
+              data-testid={`multiport-panel-${i}`}
+            >
+              <header>
+                <span className="mp-dot" />
+                <b>{t('multiport.slot', { n: i + 1 })}</b>
+                <span className="mono muted">{slot.openPath || pathOf(slot) || '—'}</span>
+                <span className="grow" />
+                <span className="mono muted small">
+                  RX {formatCount(shownCounters[i]?.rx ?? 0)} B · TX{' '}
+                  {formatCount(shownCounters[i]?.tx ?? 0)} B
+                </span>
+              </header>
+              <TextLog
+                ref={(handle) => {
+                  slotLogs.current[i] = handle;
+                }}
+                maxLines={5000}
+                emptyIcon={Cable}
+                empty={stateLabel[slot.state]}
+                testId={`multiport-output-${i}`}
+              />
+            </section>
+          ))}
+        </div>
       </Card>
     </>
   );

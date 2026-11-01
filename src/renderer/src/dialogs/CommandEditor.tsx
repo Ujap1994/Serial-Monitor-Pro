@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   commandPreview,
+  MAX_STEP_PAUSE_MS,
   newCommand,
   NEWLINES,
   validateCommand,
   type Command,
+  type CommandStep,
   type Newline,
 } from '@shared/core/commands';
 import { DATA_FORMATS, type DataFormat } from '@shared/core/format';
@@ -30,6 +32,8 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
     setCmd((c) => ({ ...c, ...patch }));
     setError('');
   };
+  const setStep = (index: number, patch: Partial<CommandStep>): void =>
+    update({ steps: cmd.steps.map((s, i) => (i === index ? { ...s, ...patch } : s)) });
 
   const save = (): void => {
     const trimmed = { ...cmd, name: cmd.name.trim() };
@@ -73,30 +77,116 @@ export function CommandEditor({ command, onSave, onClose }: Props): ReactNode {
             data-testid="command-name"
           />
         </Field>
-        <Field label={t('command.format')}>
-          <Select<DataFormat>
-            value={cmd.fmt}
-            options={DATA_FORMATS}
-            onChange={(fmt) => update({ fmt })}
-          />
-        </Field>
-        <Field label={t('command.newline')}>
+        {!cmd.sequence && (
+          <Field label={t('command.format')}>
+            <Select<DataFormat>
+              value={cmd.fmt}
+              options={DATA_FORMATS}
+              onChange={(fmt) => update({ fmt })}
+            />
+          </Field>
+        )}
+        <Field label={t('command.newline')} className={cmd.sequence ? 'span-2' : undefined}>
           <Select<Newline>
             value={cmd.newline}
             options={NEWLINES.map((n) => ({ value: n, label: t(`newline.${n}`) }))}
             onChange={(newline) => update({ newline })}
           />
         </Field>
-        <Field label={t('command.data')} className="span-2">
-          <Input
-            mono
-            value={cmd.data}
-            placeholder={t('command.dataPlaceholder')}
-            onChange={(e) => update({ data: e.target.value })}
-            data-testid="command-data"
-            aria-invalid={Boolean(error)}
-          />
-        </Field>
+        <div className="span-2 row">
+          <Check
+            checked={cmd.sequence}
+            onChange={(sequence) =>
+              update(
+                sequence && !cmd.steps.length && cmd.data.trim()
+                  ? { sequence, steps: [{ data: cmd.data, fmt: cmd.fmt, pauseMs: 0 }] }
+                  : { sequence },
+              )
+            }
+            testId="command-sequence"
+            title={t('command.sequenceHint')}
+          >
+            {t('command.sequence')}
+          </Check>
+          <span className="muted small">{t('command.sequenceHint')}</span>
+        </div>
+        {cmd.sequence ? (
+          <div className="span-2 steps-editor" data-testid="command-steps">
+            <div className="steps-head">
+              <span>#</span>
+              <span>{t('command.format')}</span>
+              <span>{t('command.data')}</span>
+              <span>{t('command.stepPause')}</span>
+              <span />
+            </div>
+            {cmd.steps.map((step, i) => (
+              <div className="steps-row" key={i}>
+                <span className="muted">{i + 1}</span>
+                <Select<DataFormat>
+                  value={step.fmt}
+                  options={DATA_FORMATS}
+                  onChange={(fmt) => setStep(i, { fmt })}
+                />
+                <Input
+                  mono
+                  value={step.data}
+                  placeholder={t('command.dataPlaceholder')}
+                  onChange={(e) => setStep(i, { data: e.target.value })}
+                  data-testid={`command-step-data-${i}`}
+                />
+                <NumberInput
+                  value={step.pauseMs}
+                  min={0}
+                  max={MAX_STEP_PAUSE_MS}
+                  onChange={(pauseMs) => setStep(i, { pauseMs })}
+                  data-testid={`command-step-pause-${i}`}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  iconOnly
+                  icon={Trash2}
+                  title={t('common.delete')}
+                  onClick={() => update({ steps: cmd.steps.filter((_, j) => j !== i) })}
+                >
+                  {t('common.delete')}
+                </Button>
+              </div>
+            ))}
+            <div>
+              <Button
+                size="sm"
+                icon={Plus}
+                onClick={() =>
+                  update({
+                    steps: [
+                      ...cmd.steps,
+                      {
+                        data: '',
+                        fmt: cmd.steps[cmd.steps.length - 1]?.fmt ?? cmd.fmt,
+                        pauseMs: 100,
+                      },
+                    ],
+                  })
+                }
+                data-testid="command-step-add"
+              >
+                {t('command.stepAdd')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Field label={t('command.data')} className="span-2">
+            <Input
+              mono
+              value={cmd.data}
+              placeholder={t('command.dataPlaceholder')}
+              onChange={(e) => update({ data: e.target.value })}
+              data-testid="command-data"
+              aria-invalid={Boolean(error)}
+            />
+          </Field>
+        )}
         <Field label={t('command.delay')} hint={t('command.delayHint')}>
           <NumberInput
             value={cmd.delayMs}
