@@ -186,6 +186,20 @@ export class SimulatedDevice {
     return { cts: true, dsr: true, dcd: true };
   }
 
+  /**
+   * Control lines changed. The simulated test device restarts like the boards
+   * of the long-run test: on a DTR pulse (the reset capacitor of Arduino Uno and
+   * Mega) or when RTS pulls EN low while DTR is off (ESP32 auto-reset circuit).
+   */
+  controlLines(previous: ControlLines, next: ControlLines): void {
+    if (this.kind !== 'testdevice' || this.closed) return;
+    // ESP32: the two-transistor circuit pulls EN low exactly while RTS is set and DTR is not.
+    const enLow = (lines: ControlLines) => lines.rts && !lines.dtr;
+    const dtrPulse = !previous.dtr && next.dtr;
+    if (dtrPulse || (enLow(next) && !enLow(previous)))
+      this.later(300, () => this.testDevice?.boot());
+  }
+
   /** Called when the application writes to the device. */
   write(data: Uint8Array): void {
     if (this.closed) return;

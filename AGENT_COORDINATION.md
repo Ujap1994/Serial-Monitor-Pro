@@ -7,13 +7,14 @@ not an atomic lock: check with the active agent before overlapping work.
 
 ## Active work — 2026-10-31
 
-| Owner       | Status                                                                                                                                                                                     | Scope / files                                                                                                                                    | Next handoff                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Codex       | Local validation complete                                                                                                                                                                  | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
-| Claude Code | Done – 1.3.0: HEX input formatting everywhere, update notice checkbox, long-run test (firmware for Uno/Nano ESP32/Mega 2560/ESP32-WROOM, `sim:testdevice`, soak runner, `npm run longrun`) | src (inputs, update dialog, simulator), `hardware/`, `scripts/`, `tests/soak`, docs                                                              | Commit on `main`, CI, release                                     |
-| Claude Code | Done – 1.2.0 on `main`: sequence presets, graph regex channels/colours, multi-port separate view, decoder detail pane, configurable storage paths                                          | Presets/commands core, graph, multi-port, protocol, settings/storage (main+renderer), tests, docs, release                                       | Commit on `main`, CI and release links below                      |
-| Claude Code | Done – merged to `main`, release v1.1.0                                                                                                                                                    | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
-| Claude Code | Draft integrated by Codex                                                                                                                                                                  | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
+| Owner       | Status                                                                                                                                                                                                                        | Scope / files                                                                                                                                    | Next handoff                                                      |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Codex       | Local validation complete                                                                                                                                                                                                     | CRC transmit core, settings, CRC/Monitor UI, translations, integration tests, documentation and release                                          | GitHub CI and release package results                             |
+| Claude Code | Done – 1.3.1: unattended restarts in the long-run test (RESET/reopen/DTR/RTS), unplanned-restart and dropped-output checks, loopback probe, firmware 1.1 (watchdog, USB-stall recovery, `boot=`), Nano ESP32 on `esp32:esp32` | `hardware/`, `scripts/firmware.mjs`, `tests/soak`, `src/main/simulator.ts`, `src/main/serial.ts`, docs                                           | Commit on `main`, CI, release                                     |
+| Claude Code | Done – 1.3.0: HEX input formatting everywhere, update notice checkbox, long-run test (firmware for Uno/Nano ESP32/Mega 2560/ESP32-WROOM, `sim:testdevice`, soak runner, `npm run longrun`)                                    | src (inputs, update dialog, simulator), `hardware/`, `scripts/`, `tests/soak`, docs                                                              | Commit on `main`, CI, release                                     |
+| Claude Code | Done – 1.2.0 on `main`: sequence presets, graph regex channels/colours, multi-port separate view, decoder detail pane, configurable storage paths                                                                             | Presets/commands core, graph, multi-port, protocol, settings/storage (main+renderer), tests, docs, release                                       | Commit on `main`, CI and release links below                      |
+| Claude Code | Done – merged to `main`, release v1.1.0                                                                                                                                                                                       | CRC transmit rework (position semantics, header/footer framing), CRC/Monitor UI, UI consistency review, Python parity audit, docs, 1.1.0 release | Commit on `main`, CI and release links recorded below             |
+| Claude Code | Draft integrated by Codex                                                                                                                                                                                                     | Flow control, DTR/RTS, file sending and update notices; originally uncommitted on 1.0.2                                                          | Integrated and tested; no concurrent claim from Claude is assumed |
 
 Working branch: `codex/crc-transmit`, starting at `48920f1` (1.0.2).
 The original tracked diff is backed up locally at `/private/tmp/smp-before-codex.patch`.
@@ -108,3 +109,20 @@ Measured: 3-minute terminal runs with all four boards passed (≈5 000 requests 
 boards passed (715 frames accepted by the Uno, 0 rejected, 0 console errors). `npm run check`
 passed locally (60 Electron tests, 3 hardware skipped). Open: overnight/weekend runs by the owner,
 RS232/485 loopback adapter not yet connected.
+
+## Claude Code handoff — 2026-11-01 (1.3.1)
+
+Long runs without anyone at the hub: the soak runner restarts each board itself (firmware `RESET`,
+reopen, DTR pulse for Uno/Mega, RTS/EN for ESP32-WROOM) and the simulator's test device reacts to
+DTR/RTS like the boards. Root cause of the Nano ESP32 hangs: the TinyUSB CDC of the Arduino core
+`arduino:esp32` 2.0.18 stopped sending after a restart/reopen (loop then spun in `USBCDC::write`,
+only a power cycle helped). Fix: build with `esp32:esp32:nano_nora` (3.3.12); firmware 1.1 adds a
+loop watchdog, non-blocking USB output with `dropped=` counter, a USB-stall restart and `boot=`
+reasons; the runner reports unplanned restarts, dropped output, probes loopback ports before use
+and backs off reconnects. The owner confirmed that FTDI FT9N7051 (US232R) is now an RS232 loopback
+with pins 2–3 bridged (VDE tester disconnected); it is a `loopback` lane in the local device list.
+
+Measured: Nano ESP32 alone, RESET every minute + reopen every 90 s for 6 min – passed (core 2.0.18
+failed the same test). All five lanes for 8 min with a restart of every kind every 1–2 min –
+passed (≈14 000 requests per board, 11 692 loopback blocks, 0 timeouts, 0 changed answers,
+0 unplanned restarts).

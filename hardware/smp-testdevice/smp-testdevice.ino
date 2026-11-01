@@ -12,9 +12,9 @@
 //
 //   PING <n>      -> PONG <n>
 //   ECHO <text>   -> ECHO <text>
-//   ID?           -> ID SMP-TD/1 board=<board> fw=<version> uptime=<ms>
+//   ID?           -> ID SMP-TD/1 board=<board> fw=<version> uptime=<ms> [boot=<reason>]
 //   STAT?         -> STAT uptime=.. rxbytes=.. txbytes=.. lines=.. frames=.. crcerr=.. badframes=..
-//                    errors=.. streamed=.. faults=.. free=<bytes of free RAM>
+//                    errors=.. streamed=.. faults=.. dropped=.. free=<bytes of free RAM>
 //   CLEAR         -> OK CLEAR
 //   STREAM <ms>   -> OK STREAM <ms>, then "Temp:.., Humidity:.., Pressure:.., Seq:<n>" (0 = off)
 //   NMEA <ms>     -> OK NMEA <ms>, then $GPGGA with the sequence as time (0 = off)
@@ -24,6 +24,12 @@
 //   AUTO <ms>     -> OK AUTO <ms>: stored permanently, the sensor stream starts after every boot (0 = off)
 //   RESET         -> OK RESET, restart, READY ...
 //   frame         -> ACK <crc> | NAK <expected> <received> | NAK LEN <len> | NAK TIMEOUT
+//
+// ESP32 boards report why they started (boot=power|reset|watchdog|panic|usb-stall|brownout|
+// other) and restart by themselves when the loop hangs (task watchdog, 5 s). The Nano ESP32
+// never blocks on its native USB port: output the host does not take within 100 ms is
+// dropped and counted (dropped=), and a USB port that takes nothing for 10 s while the
+// host holds it open restarts the board – a long run without anyone at the hub recovers.
 
 #include <Arduino.h>
 #include <math.h>
@@ -31,18 +37,34 @@
 #if defined(ESP32)
 #include <Esp.h>
 #include <Preferences.h>
+#include <esp_attr.h>
+#include <esp_system.h>
 #elif defined(__AVR__)
 #include <EEPROM.h>
 #endif
 
 #define TD_PROTOCOL "SMP-TD/1"
-#define TD_FIRMWARE "1.0"
+#define TD_FIRMWARE "1.1"
 #define TD_BAUD 115200
 #define TD_MAX_FRAME 64
 #define TD_MAX_LINE 120
 #define TD_MAX_BURST 4096
 #define TD_MIN_PERIOD 10
 #define TD_FRAME_TIMEOUT 1000
+#define TD_TX_WAIT 100        // ms a native USB port may take to accept output
+#define TD_USB_STALL 10000    // ms without any progress while the host holds the port
+
+// Native USB through TinyUSB (Nano ESP32): writes block while the host holds the port.
+#if defined(ESP32) && ARDUINO_USB_CDC_ON_BOOT && !ARDUINO_USB_MODE
+#define TD_NATIVE_USB 1
+#else
+#define TD_NATIVE_USB 0
+#endif
+#if defined(ESP32)
+#define TD_TX_BUFFER 256
+#else
+#define TD_TX_BUFFER 64
+#endif
 
 #if defined(ARDUINO_AVR_UNO)
 #define TD_BOARD "uno"
@@ -58,7 +80,7 @@
 
 // ── Counters ─────────────────────────────────────────────────────────────────
 struct Counters {
-  uint32_t rxbytes, txbytes, lines, frames, crcerr, badframes, errors, streamed, faults;
+  uint32_t rxbytes, txbytes, lines, frames, crcerr, badframes, errors, streamed, faults, dropped;
 };
 static Counters counters;
 
@@ -80,10 +102,54 @@ struct TdStream {
 };
 static TdStream sensorStream, nmeaStream, modbusStream;
 
-// ── Output (counted) ─────────────────────────────────────────────────────────
+// ── Output (counted, sent in whole lines) ────────────────────────────────────
+static uint8_t txBuffer[TD_TX_BUFFER];
+static size_t txLength = 0;
+#if TD_NATIVE_USB
+static bool txBlocked = false;  // the last write did not get through: do not wait again
+#endif
+
+static void flushOut() {
+  if (!txLength) return;
+#if TD_NATIVE_USB
+  // USBCDC::write() spins until the host takes the data – never call it without room.
+  size_t done = 0;
+  uint32_t since = millis();
+  while (done < txLength) {
+    int room = Serial.availableForWrite();
+    if (room > 0) {
+      size_t n = txLength - done < (size_t)room ? txLength - done : (size_t)room;
+      size_t sent = Serial.write(txBuffer + done, n);
+      if (sent) {
+        done += sent;
+        since = millis();
+        txBlocked = false;
+        continue;
+      }
+    }
+    if (txBlocked || millis() - since >= TD_TX_WAIT) {
+      txBlocked = true;
+      break;
+    }
+    delay(1);
+  }
+  counters.dropped += txLength - done;
+#else
+  Serial.write(txBuffer, txLength);
+#endif
+  txLength = 0;
+}
+
 static void out(const uint8_t *data, size_t n) {
-  Serial.write(data, n);
   counters.txbytes += n;
+  while (n) {
+    size_t take = TD_TX_BUFFER - txLength < n ? TD_TX_BUFFER - txLength : n;
+    memcpy(txBuffer + txLength, data, take);
+    txLength += take;
+    data += take;
+    n -= take;
+    if (txLength == TD_TX_BUFFER) flushOut();
+  }
 }
 static void outByte(uint8_t b) { out(&b, 1); }
 static void outText(const char *s) { out((const uint8_t *)s, strlen(s)); }
@@ -113,7 +179,10 @@ static void outFloat(float v, uint8_t decimals) {
   dtostrf(v, 0, decimals, buffer);
   outText(buffer);
 }
-static void newline() { outByte('\n'); }
+static void newline() {
+  outByte('\n');
+  flushOut();
+}
 
 // ── Checksums ────────────────────────────────────────────────────────────────
 static uint16_t crc16Update(uint16_t crc, uint8_t b) {
@@ -179,8 +248,46 @@ static void saveAuto(uint16_t ms) {
 #endif
 }
 
+// ── Why the board started (ESP32) ────────────────────────────────────────────
+#if defined(ESP32)
+#define TD_RESTART_COMMAND 0x5D0C0001UL
+#define TD_RESTART_USB_STALL 0x5D0C0002UL
+// Survives a software restart, not a power cycle.
+static RTC_NOINIT_ATTR uint32_t plannedRestart;
+static const char *bootReason = "other";
+
+static void readBootReason() {
+  esp_reset_reason_t reason = esp_reset_reason();
+  if (reason == ESP_RST_SW && plannedRestart == TD_RESTART_COMMAND) bootReason = "reset";
+  else if (reason == ESP_RST_SW && plannedRestart == TD_RESTART_USB_STALL) bootReason = "usb-stall";
+  else if (reason == ESP_RST_POWERON) bootReason = "power";
+  else if (reason == ESP_RST_EXT) bootReason = "pin";
+  else if (reason == ESP_RST_SW) bootReason = "software";
+  else if (reason == ESP_RST_PANIC) bootReason = "panic";
+  else if (reason == ESP_RST_INT_WDT || reason == ESP_RST_TASK_WDT || reason == ESP_RST_WDT)
+    bootReason = "watchdog";
+  else if (reason == ESP_RST_BROWNOUT) bootReason = "brownout";
+  else bootReason = "other";
+  plannedRestart = 0;
+}
+
+static void restartBecause(uint32_t why) {
+  plannedRestart = why;
+  delay(20);
+  ESP.restart();
+}
+#endif
+
+static void outBootReason() {
+#if defined(ESP32)
+  outText(" boot=");
+  outText(bootReason);
+#endif
+}
+
 static void ready() {
   outText("READY " TD_PROTOCOL " board=" TD_BOARD " fw=" TD_FIRMWARE);
+  outBootReason();
   newline();
   uint16_t autoMs = loadAuto();
   if (autoMs) {
@@ -225,11 +332,12 @@ static void setStream(TdStream &stream, const uint8_t *arg, uint8_t argLength, c
 }
 
 static void restart() {
+  flushOut();
   Serial.flush();
-  delay(20);
 #if defined(ESP32)
-  ESP.restart();
+  restartBecause(TD_RESTART_COMMAND);
 #else
+  delay(20);
   // AVR: start the program again (state reset below, the hardware stays as it is).
   resetState();
   bootTime = millis();
@@ -269,6 +377,7 @@ static void command() {
   } else if (wordIs(word, "ID?")) {
     outText("ID " TD_PROTOCOL " board=" TD_BOARD " fw=" TD_FIRMWARE " uptime=");
     outNumber(millis() - bootTime);
+    outBootReason();
     newline();
   } else if (wordIs(word, "STAT?")) {
     outText("STAT uptime=");
@@ -291,6 +400,8 @@ static void command() {
     outNumber(counters.streamed);
     outText(" faults=");
     outNumber(counters.faults);
+    outText(" dropped=");
+    outNumber(counters.dropped);
     outText(" free=");
     outNumber(freeMemory());
     newline();
@@ -329,6 +440,7 @@ static void command() {
       crc = crc16Update(crc, b);
       outByte(b);
     }
+    flushOut();
     outText("BURSTEND ");
     outHex4(crc);
     newline();
@@ -470,7 +582,34 @@ static void modbusItem(uint32_t seq, bool fault) {
   out(f, 9);
 }
 
+#if TD_NATIVE_USB
+// A host that holds the port (DTR and RTS set) but receives nothing for 10 s:
+// the USB stack is stuck. Only a restart helps – nobody is at the hub.
+static bool stalled = false;
+static uint32_t stallSince = 0;
+static void watchUsb(uint32_t now) {
+  if (Serial && Serial.availableForWrite() == 0) {
+    if (!stalled) {
+      stalled = true;
+      stallSince = now;
+    } else if ((int32_t)(now - stallSince) > TD_USB_STALL) {
+      restartBecause(TD_RESTART_USB_STALL);
+    }
+  } else {
+    stalled = false;
+  }
+}
+#endif
+
 void setup() {
+#if defined(ESP32)
+  readBootReason();
+#endif
+#if TD_NATIVE_USB
+  // DTR/RTS sequences and 1200 baud would jump into the ROM bootloader; uploads
+  // use DFU, so a test run toggling the lines must not stop the firmware.
+  Serial.enableReboot(false);
+#endif
   Serial.begin(TD_BAUD);
   resetState();
   bootTime = millis();
@@ -480,6 +619,9 @@ void setup() {
   while (!Serial && millis() - wait < 1500) delay(10);
 #endif
   ready();
+#if defined(ESP32)
+  enableLoopWDT();  // a hanging loop restarts the board after 5 s
+#endif
 }
 
 void loop() {
@@ -504,4 +646,8 @@ void loop() {
     if (fault) counters.faults++;
     modbusItem(modbusStream.seq, fault);
   }
+  flushOut();  // Modbus frames have no line end
+#if TD_NATIVE_USB
+  watchUsb(now);
+#endif
 }

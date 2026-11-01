@@ -35,23 +35,48 @@ The underlying commands can also be called directly: `SMP_SOAK_MINUTES=60 SMP_SO
 
 Every board gets a mix of requests, one at a time with a short pause:
 
-| Request                 | Checked                                                                                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PING <n>`              | The answer `PONG <n>` and the round-trip time.                                                                                                  |
-| CRC frame `AA 55 …`     | The **device** recalculates the CRC and answers `ACK` – every 100th frame is damaged on purpose and must be rejected (`NAK`).                   |
-| `ECHO <random text>`    | The text comes back byte for byte.                                                                                                              |
-| `BURST <64…1024>`       | Every byte of the burst and its CRC.                                                                                                            |
-| `STAT?` (every 30 s)    | The device's own frame and CRC-error counters must equal what was sent.                                                                         |
-| `RESET` (as configured) | The device restarts and is set up again; Nano ESP32 boards re-enumerate on USB.                                                                 |
-| Sensor and NMEA streams | Running in the background the whole time: no sequence number may be missing; NMEA checksums are verified (intentional faults must be reported). |
+| Request                  | Checked                                                                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PING <n>`               | The answer `PONG <n>` and the round-trip time.                                                                                                  |
+| CRC frame `AA 55 …`      | The **device** recalculates the CRC and answers `ACK` – every 100th frame is damaged on purpose and must be rejected (`NAK`).                   |
+| `ECHO <random text>`     | The text comes back byte for byte.                                                                                                              |
+| `BURST <64…1024>`        | Every byte of the burst and its CRC.                                                                                                            |
+| `STAT?` (every 30 s)     | The device's own frame and CRC-error counters must equal what was sent.                                                                         |
+| Restarts (as configured) | Firmware `RESET`, closing and reopening the port, a DTR or RTS reset – see _Unattended restarts_.                                               |
+| Sensor and NMEA streams  | Running in the background the whole time: no sequence number may be missing; NMEA checksums are verified (intentional faults must be reported). |
 
-A loopback adapter gets numbered blocks with a CRC that must come back unchanged. If a device
-disappears (hub switch, re-enumeration), the test finds it again by its serial number and records
-the reconnection and the downtime.
+A loopback adapter (RX and TX bridged) first gets a short probe. Only if it comes back unchanged
+does the adapter get numbered blocks with a CRC that must come back unchanged as well; otherwise
+nothing more is sent to that port – it might be a real device. If a device disappears (hub switch,
+re-enumeration), the test finds it again by its serial number and records the reconnection and the
+downtime. A device that does not answer after reconnecting is tried less and less often (1 s up to
+30 s).
 
 **Passed** when no answer was missing or changed, no valid frame was rejected and no damaged one
-accepted, no stream item went missing, every burst was complete, the device counters match and no
-unexpected reboot happened.
+accepted, no stream item went missing, every burst was complete, the device counters match, the
+device never had to drop output (the port was always read) and no device restarted without being
+asked.
+
+## Unattended restarts
+
+Long runs cannot rely on someone at the hub switches, so the test restarts the boards itself – each
+kind every few minutes, as set per device in `hardware/devices.local.json`:
+
+| Setting                           | What happens                                                                                      | Boards                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `resetEveryMin`                   | The firmware command `RESET`.                                                                     | All; the Nano ESP32 leaves USB and comes back – a real reconnect. |
+| `reopenEveryMin`                  | The port is closed and opened again, as a user would.                                             | All; Uno and Mega restart on open.                                |
+| `lineReset` + `lineResetEveryMin` | `dtr`: a DTR pulse (reset capacitor of Uno and Mega); `rts`: RTS pulls EN low (ESP32 auto-reset). | Uno, Mega (`dtr`), ESP32-WROOM (`rts`); not the Nano ESP32.       |
+
+After every restart the device must answer again and is set up from scratch; the report counts each
+kind. A restart nobody asked for is reported as **unplanned** – with the reason the ESP32 boards
+give (`boot=watchdog`, `panic`, `usb-stall` …). A restart after the connection was lost and the
+board started from power (hub switch, unplugged) is noted, but not counted as a failure.
+
+The ESP32 test firmware recovers by itself instead of hanging until someone pulls the plug: a loop
+that hangs for 5 s restarts the board (task watchdog), and on the Nano ESP32 a USB port that takes
+nothing for 10 s while the host holds it open restarts it as well. Such a restart is always
+reported as unplanned, so it never goes unnoticed.
 
 ## GUI test
 
@@ -75,7 +100,8 @@ the trigger never fired and the renderer reported no error.
 Every run writes `soak-reports/<date-time>[-gui]/`:
 
 - `report.md` – the verdict, a table per device (requests, timeouts, changed answers, stream lines,
-  gaps, bursts, reconnects, downtime, latency p50/p95/p99/max) and the last notes per device.
+  gaps, bursts, restarts by kind – RESET / reopen / line / unplanned –, reconnects, downtime,
+  latency p50/p95/p99/max) and the last notes per device, including the device's own counters.
 - `report.json` – everything, for comparisons between runs.
 - `memory.csv` / `samples.csv` – memory over time, for spotting leaks.
 
@@ -84,8 +110,8 @@ Every run writes `soak-reports/<date-time>[-gui]/`:
 1. `npm run longrun` with the **simulator** for a few minutes – checks the test itself.
 2. 10 minutes with the boards – check the latencies and that every board passes.
 3. 2 hours, then overnight (e.g. 480 minutes, mode _both_), then a weekend.
-4. Physical reconnects: switch a port of the hub off and on during the terminal test; the report
-   shows the reconnection and the downtime.
+4. Physical reconnects (optional, the test restarts the boards by itself): switch a port of the
+   hub off and on during the terminal test; the report shows the reconnection and the downtime.
 
 ## Known limits
 
@@ -94,6 +120,9 @@ Every run writes `soak-reports/<date-time>[-gui]/`:
   requests for that reason.
 - ESP32 boards print their boot messages at 74880 baud after a restart; they are ignored while a
   device is being set up.
+- Build the Nano ESP32 firmware with the Espressif core (`esp32:esp32:nano_nora`, 3.x). With the
+  older Arduino core (`arduino:esp32`, 2.0.x) its USB stack stopped sending after a restart or a
+  reopen of the port – in a long run that meant a board that only came back after a power cycle.
 - The tests measure the application on this computer; they do not certify a device.
 - Only configured devices are opened. Never add measuring equipment or other production devices to
   the device list.

@@ -179,6 +179,7 @@ function openSimulated(options: OpenOptions, cb: Callbacks): Handle {
     },
     setLines: (next) => {
       if (options.flowControl === 'rtscts') return Promise.reject(new Error(HARDWARE_LINES_ERROR));
+      device.controlLines(lines, next);
       lines = next;
       return Promise.resolve();
     },

@@ -34,7 +34,7 @@ interface Device {
 
 async function devicePaths(): Promise<{ name: string; path: string }[]> {
   if (!useDevices) return [{ name: 'sim-testdevice', path: 'sim:testdevice' }];
-  const file = join(root, 'hardware', 'devices.local.json');
+  const file = process.env.SMP_SOAK_CONFIG ?? join(root, 'hardware', 'devices.local.json');
   const local = JSON.parse(readFileSync(file, 'utf8')) as { devices: Device[]; never?: string[] };
   const ports = await SerialPort.list();
   const never = new Set(local.never ?? []);

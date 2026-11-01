@@ -37,7 +37,7 @@ const KNOWN = {
   },
   '2341:0070': {
     board: 'nano-esp32',
-    fqbn: 'arduino:esp32:nano_nora',
+    fqbn: 'esp32:esp32:nano_nora',
     label: 'Arduino Nano ESP32',
   },
 };
@@ -174,7 +174,7 @@ async function check(name) {
       text += d.toString('latin1');
     });
     // AVR boards reset when the port opens; wait for READY (or the boot to finish).
-    const deadline = Date.now() + 4000;
+    const deadline = Date.now() + (device.role === 'loopback' ? 0 : 4000);
     while (Date.now() < deadline && !text.includes('READY'))
       await new Promise((r) => setTimeout(r, 50));
     const probe = device.role === 'loopback' ? 'LOOPBACK-PROBE\n' : 'ID?\n';

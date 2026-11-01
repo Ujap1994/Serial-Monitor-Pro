@@ -5,7 +5,8 @@
 //    exactly known answers, CRC frames checked by the device, streams with
 //    sequence numbers, bursts, device counters compared at the end.
 //  - "loopback": an adapter with RX and TX bridged – every block must come
-//    back byte for byte.
+//    back byte for byte. A short probe must come back first; if it does not,
+//    nothing more is ever sent to that port (it may be a real device).
 // Devices are found by USB serial number, so a re-plugged device that got a
 // new port name is found again. Nothing is opened that is not configured.
 
@@ -39,6 +40,15 @@ export interface LaneConfig {
   faultEvery?: number;
   /** Send RESET every n minutes (0 = never). */
   resetEveryMin?: number;
+  /** Close and reopen the port every n minutes (0 = never) – AVR boards restart on open. */
+  reopenEveryMin?: number;
+  /**
+   * Hardware reset through the control lines every n minutes (0 = never):
+   * "dtr" – a DTR pulse (reset capacitor of Arduino Uno and Mega),
+   * "rts" – RTS pulls EN low while DTR is off (ESP32 auto-reset circuit).
+   */
+  lineReset?: 'dtr' | 'rts';
+  lineResetEveryMin?: number;
   /** DTR/RTS after opening; some ESP32 boards need both off. */
   dtr?: boolean;
   rts?: boolean;
@@ -68,6 +78,13 @@ interface LaneStats {
   burstBad: number;
   reboots: number;
   resets: number;
+  reopens: number;
+  lineResets: number;
+  recoveryFailed: number;
+  /** Restarts nobody asked for: watchdog, crash, USB stall – or a board rebooting by itself. */
+  unplanned: number;
+  /** Bytes the device could not send because the port was not read (STAT dropped=). */
+  dropped: number;
   reconnects: number;
   downtimeMs: number;
   unexpected: number;
@@ -97,6 +114,11 @@ const newStats = (): LaneStats => ({
   burstBad: 0,
   reboots: 0,
   resets: 0,
+  reopens: 0,
+  lineResets: 0,
+  recoveryFailed: 0,
+  unplanned: 0,
+  dropped: 0,
   reconnects: 0,
   downtimeMs: 0,
   unexpected: 0,
@@ -118,6 +140,20 @@ function rng(seed: number): () => number {
     s = (s * 1664525 + 1013904223) >>> 0;
     return s / 0x100000000;
   };
+}
+
+/** True when a device uptime `ms` read at `now` means it restarted since `last`. */
+export function restartedSince(last: { ms: number; at: number } | null, ms: number, now: number) {
+  return last !== null && ms + 3000 < last.ms + (now - last.at);
+}
+
+/**
+ * A restart after a lost connection is expected when the board started from power
+ * (unplugged, hub switch) – boards without a boot reason (AVR) always do.
+ * Watchdog, crash and USB stall restarts are never expected.
+ */
+export function expectedAfterLoss(lost: boolean, boot: string | undefined): boolean {
+  return lost && (boot === undefined || boot === 'power' || boot === 'pin');
 }
 
 type Pending = {
@@ -148,6 +184,18 @@ class Lane {
   private readyResolve: (() => void) | null = null;
   private expectingReset = false;
   private downSince = 0;
+  /** Last known device uptime – a smaller one later means the device restarted. */
+  private uptime: { ms: number; at: number } | null = null;
+  /** The test itself restarted the device (RESET, reopen of an AVR board, line reset). */
+  private restartPlanned = false;
+  /** The connection was lost since the last uptime check (unplugged, hub switch). */
+  private lostSinceCheck = false;
+  /** dropped= of the last STAT since CLEAR. */
+  private droppedSeen = 0;
+  /** Pause before the next reconnect attempt; grows while the device does not answer. */
+  private retryMs = 1000;
+  /** Set when this lane must not send anything any more (loopback probe failed). */
+  private stopped = '';
   private readonly random: () => number;
 
   constructor(
@@ -240,6 +288,7 @@ class Lane {
   onClosed(lost: boolean): void {
     if (!this.stats.connected) return;
     this.stats.connected = false;
+    if (lost) this.lostSinceCheck = true;
     this.downSince = Date.now();
     this.note(lost ? `connection lost on ${this.path}` : `closed ${this.path}`);
     this.pending?.resolve(null);
@@ -254,12 +303,20 @@ class Lane {
       done.resolve({ bytes: done.got, end: line });
       return;
     }
-    if (line.startsWith('READY ')) {
-      if (this.expectingReset) this.stats.resets++;
-      else if (this.readyResolve === null) {
+    // A hardware reset can cut a line in half: "Temp:23.4, HumREADY SMP-TD/1 …".
+    const readyAt = line.indexOf('READY SMP-TD/1');
+    if (readyAt > 0 && (this.expectingReset || this.preparing))
+      this.note(`line cut by the restart: ${JSON.stringify(line.slice(0, readyAt))}`);
+    if (readyAt >= 0 && (readyAt === 0 || this.expectingReset || this.preparing)) {
+      if (this.expectingReset) {
+        // counted by the action that caused it
+      } else if (this.readyResolve === null) {
         this.stats.reboots++;
         this.note(`unexpected reboot: ${line}`);
       }
+      // Counted here (or planned): the next uptime check must not count it again.
+      this.uptime = { ms: 0, at: Date.now() };
+      this.droppedSeen = 0;
       this.expectingReset = false;
       this.streamSeq = -1;
       this.nmeaSeq = -1;
@@ -271,6 +328,11 @@ class Lane {
     }
     if (line.startsWith('Temp:')) {
       const seq = Number(/Seq:(\d+)$/.exec(line)?.[1]);
+      // While a device restarts or is set up, lines may be cut or missing: only follow.
+      if (this.preparing) {
+        if (Number.isFinite(seq)) this.streamSeq = seq;
+        return;
+      }
       if (
         !Number.isFinite(seq) ||
         !/^Temp:-?[\d.]+, Humidity:-?[\d.]+, Pressure:-?[\d.]+, Seq:\d+$/.test(line)
@@ -289,6 +351,10 @@ class Lane {
     }
     if (line.startsWith('$GPGGA,')) {
       const seq = Number(line.slice(7, 13));
+      if (this.preparing) {
+        if (Number.isFinite(seq)) this.nmeaSeq = seq;
+        return;
+      }
       if (isNmeaValid(line)) this.stats.nmeaOk++;
       else this.stats.nmeaBad++;
       if (this.nmeaSeq >= 0 && seq !== (this.nmeaSeq + 1) % 1_000_000) {
@@ -352,29 +418,38 @@ class Lane {
   }
 
   /** After opening: wait for the boot message of boards that reset on open, then set up. */
-  async prepare(): Promise<boolean> {
-    if (this.config.role === 'loopback') return true;
+  /** `booted`: the READY line was already seen – do not wait for it again. */
+  async prepare(booted = false): Promise<boolean> {
+    if (this.config.role === 'loopback') return this.probeLoopback();
     this.preparing = true;
     try {
-      return await this.setup();
+      return await this.setup(booted);
     } finally {
       this.preparing = false;
     }
   }
 
-  private async setup(): Promise<boolean> {
-    const ready = new Promise<void>((resolve) => {
-      this.readyResolve = resolve;
-    });
-    await Promise.race([ready, sleep(3500)]);
-    this.readyResolve = null;
+  private async setup(booted: boolean): Promise<boolean> {
+    if (!booted) {
+      // Boards that restart on open (AVR, DTR) need a moment; others answer at once.
+      const ready = new Promise<void>((resolve) => {
+        this.readyResolve = resolve;
+      });
+      await Promise.race([ready, sleep(3500)]);
+      this.readyResolve = null;
+    }
     if (!this.stats.connected) return false;
+    // New baseline: a device that kept streaming while the port was closed (native
+    // USB, reopen) continues with later sequence numbers.
+    this.streamSeq = -1;
+    this.nmeaSeq = -1;
     const id = await this.request('ID?\n', (l) => l.startsWith('ID SMP-TD/1'), 2000);
     if (!id) {
       if (this.stats.connected) this.note('no answer to ID? – is the SMP test firmware flashed?');
       return false;
     }
     this.note(id);
+    await this.checkUptime(id);
     const setup = [
       'CLEAR\n',
       `STREAM ${this.config.streamMs ?? 200}\n`,
@@ -389,7 +464,55 @@ class Lane {
     this.nmeaSeq = -1;
     this.epochFrames = 0;
     this.epochCorrupt = 0;
+    this.droppedSeen = 0;
     return true;
+  }
+
+  /**
+   * Compares the device uptime (from ID or STAT) with the last one. A device that
+   * restarted although the test did not ask for it is reported – unless it lost
+   * its connection before and started from power (unplugged, hub switch).
+   */
+  private async checkUptime(line: string): Promise<void> {
+    const ms = Number(/uptime=(\d+)/.exec(line)?.[1]);
+    if (!Number.isFinite(ms)) return;
+    const now = Date.now();
+    const last = this.uptime;
+    this.uptime = { ms, at: now };
+    const planned = this.restartPlanned;
+    const lost = this.lostSinceCheck;
+    this.restartPlanned = false;
+    this.lostSinceCheck = false;
+    if (!restartedSince(last, ms, now) || planned) return;
+    let boot = /boot=(\S+)/.exec(line)?.[1];
+    if (!boot && line.startsWith('STAT ')) {
+      const id = await this.request('ID?\n', (l) => l.startsWith('ID SMP-TD/1'), 1500);
+      boot = id ? /boot=(\S+)/.exec(id)?.[1] : undefined;
+    }
+    const reason = boot ? ` (boot=${boot})` : '';
+    // Boards without a boot reason (AVR) restart whenever they lose power.
+    if (expectedAfterLoss(lost, boot)) {
+      this.note(`device restarted after the connection was lost${reason}`);
+      return;
+    }
+    this.stats.unplanned++;
+    this.note(`device restarted without being asked${reason}`);
+  }
+
+  /** Before anything else goes to a loopback port: a short probe must come back unchanged. */
+  private async probeLoopback(): Promise<boolean> {
+    const probe = encoder.encode('SMP loopback probe\r\n');
+    const result = new Promise<boolean>((resolve) => {
+      this.loopbackWait = { data: probe, got: [], resolve };
+    });
+    await this.write(probe);
+    const ok = await Promise.race([result, sleep(1000).then(() => false)]);
+    this.loopbackWait = null;
+    if (!ok) {
+      this.stopped = 'no loopback: the probe did not come back – nothing more was sent';
+      this.note(this.stopped);
+    }
+    return ok;
   }
 
   private payload(max: number): Uint8Array {
@@ -415,6 +538,13 @@ class Lane {
         .map(([k, v]) => [k, Number(v)]),
     ) as Record<string, number>;
     this.stats.lastDeviceStat = stat;
+    await this.checkUptime(line);
+    const dropped = stat.dropped ?? 0;
+    if (dropped > this.droppedSeen) {
+      this.stats.dropped += dropped - this.droppedSeen;
+      this.note(`device could not send ${dropped - this.droppedSeen} bytes (port not read)`);
+    }
+    this.droppedSeen = dropped;
     if (stat.frames !== this.epochFrames || stat.crcerr !== this.epochCorrupt) {
       this.stats.deviceMismatch++;
       this.note(
@@ -424,35 +554,105 @@ class Lane {
   }
 
   /** One request of the test device lane. */
-  async step(n: number, lastStat: { t: number }, lastReset: { t: number }): Promise<void> {
+  /** Waits for READY after a restart – or until the port disappears (native USB). */
+  private async awaitBoot(ready: Promise<void>, ms = 8000): Promise<boolean> {
+    const deadline = Date.now() + ms;
+    let booted = false;
+    void ready.then(() => {
+      booted = true;
+    });
+    while (!booted && this.stats.connected && Date.now() < deadline) await sleep(50);
+    this.readyResolve = null;
+    return booted;
+  }
+
+  private expectBoot(): Promise<void> {
+    this.expectingReset = true;
+    // Boot messages (ESP32 ROM output) are expected until the device is set up again.
+    this.preparing = true;
+    return new Promise<void>((resolve) => {
+      this.readyResolve = resolve;
+    });
+  }
+
+  /**
+   * Restarts without anyone at the hub: firmware RESET, closing and reopening
+   * the port, and a hardware reset through DTR or RTS. Returns true when it did
+   * something (then no ordinary request follows in this round).
+   */
+  async maintenance(due: Record<'reset' | 'reopen' | 'line', number>): Promise<boolean> {
+    if (this.config.role !== 'testdevice') return false;
+    const now = Date.now();
+    const every = (min?: number) => (min ?? 0) * 60_000;
+    const check = (key: keyof typeof due, ms: number) => ms > 0 && now - due[key] > ms;
+
+    if (check('reset', every(this.config.resetEveryMin))) {
+      due.reset = now;
+      await this.deviceStat();
+      const ready = this.expectBoot();
+      this.restartPlanned = true;
+      if (await this.request('RESET\n', (l) => l === 'OK RESET')) this.stats.resets++;
+      const booted = await this.awaitBoot(ready);
+      if (!this.stats.connected) return true; // re-enumerates: the run loop reconnects
+      if (!booted || !(await this.prepare(true))) this.recoveryFailed('RESET');
+      return true;
+    }
+    if (check('reopen', every(this.config.reopenEveryMin))) {
+      due.reopen = now;
+      await this.deviceStat();
+      this.restartPlanned = true; // AVR boards restart on open
+      await this.close();
+      await sleep(500);
+      if (!(await this.open()) || !(await this.prepare())) {
+        this.recoveryFailed('reopen');
+        this.downSince = Date.now();
+        await this.close();
+      } else this.stats.reopens++;
+      return true;
+    }
+    if (this.config.lineReset && check('line', every(this.config.lineResetEveryMin))) {
+      due.line = now;
+      await this.deviceStat();
+      const ready = this.expectBoot();
+      this.restartPlanned = true;
+      // DTR pulse with RTS off: Uno/Mega ignore RTS, and "RTS on, DTR off" would
+      // be the ESP32 reset state – one restart per pulse, not two.
+      const pulse =
+        this.config.lineReset === 'dtr'
+          ? [
+              { dtr: false, rts: false },
+              { dtr: true, rts: false },
+            ]
+          : [
+              { dtr: false, rts: true },
+              { dtr: false, rts: false },
+            ];
+      for (const lines of pulse) {
+        const result = await this.manager.setLines(this.id, lines);
+        if (!result.ok) this.note(`setting ${JSON.stringify(lines)} failed: ${result.error}`);
+        await sleep(120);
+      }
+      const booted = await this.awaitBoot(ready);
+      if (booted && (await this.prepare(true))) this.stats.lineResets++;
+      else this.recoveryFailed(`${this.config.lineReset.toUpperCase()} reset`);
+      return true;
+    }
+    return false;
+  }
+
+  private recoveryFailed(what: string): void {
+    this.stats.recoveryFailed++;
+    this.preparing = false;
+    this.expectingReset = false;
+    this.note(`device did not come back after ${what}`);
+  }
+
+  async step(n: number, lastStat: { t: number }): Promise<void> {
     const max = this.config.maxPayload ?? 32;
     const now = Date.now();
     if (now - lastStat.t > 30_000) {
       lastStat.t = now;
       return this.deviceStat();
-    }
-    const resetEvery = (this.config.resetEveryMin ?? 0) * 60_000;
-    if (resetEvery && now - lastReset.t > resetEvery) {
-      lastReset.t = now;
-      await this.deviceStat();
-      this.expectingReset = true;
-      // Boot messages (ESP32 ROM output) are expected until the device is set up again.
-      this.preparing = true;
-      const ready = new Promise<void>((resolve) => {
-        this.readyResolve = resolve;
-      });
-      await this.request('RESET\n', (l) => l === 'OK RESET');
-      // Wait for the boot message – or for the port to disappear (native USB
-      // boards re-enumerate; the run loop then reconnects).
-      const deadline = Date.now() + 8000;
-      let booted = false;
-      void ready.then(() => {
-        booted = true;
-      });
-      while (!booted && this.stats.connected && Date.now() < deadline) await sleep(50);
-      this.readyResolve = null;
-      if (this.stats.connected) await this.prepare();
-      return;
     }
     if (n % 40 === 39) {
       const size = 64 + Math.floor(this.random() * (max >= 32 ? 960 : 192));
@@ -574,22 +774,30 @@ class Lane {
 
   async run(until: number): Promise<void> {
     const lastStat = { t: Date.now() };
-    const lastReset = { t: Date.now() };
+    const start = Date.now();
+    const due = { reset: start, reopen: start, line: start };
     let n = 0;
-    while (Date.now() < until) {
+    while (Date.now() < until && !this.stopped) {
       if (!this.stats.connected) {
         // Unplugged (hub switch) or reset with USB re-enumeration: find it again.
-        await sleep(1000);
+        // A device that does not answer is tried less and less often.
+        await sleep(Math.min(this.retryMs, Math.max(0, until - Date.now())));
+        if (Date.now() >= until) break;
         if (await this.open()) {
           this.stats.reconnects++;
           this.stats.downtimeMs += Date.now() - this.downSince;
           this.note(`reconnected on ${this.path}`);
-          if (!(await this.prepare())) await this.close();
+          if (await this.prepare()) {
+            this.retryMs = 1000;
+            continue;
+          }
+          await this.close();
         }
+        this.retryMs = Math.min(this.retryMs * 2, 30_000);
         continue;
       }
       if (this.config.role === 'loopback') await this.loopbackStep(n);
-      else await this.step(n, lastStat, lastReset);
+      else if (!(await this.maintenance(due))) await this.step(n, lastStat);
       n++;
       await sleep(this.config.gapMs ?? 20);
     }
@@ -609,6 +817,10 @@ class Lane {
 
   get portPath(): string {
     return this.path;
+  }
+
+  get stoppedReason(): string {
+    return this.stopped;
   }
 }
 
@@ -639,6 +851,7 @@ function percentile(sorted: number[], p: number): number {
 function judge(lane: Lane, configured: boolean): string[] {
   const s = lane.stats;
   const f: string[] = [];
+  if (lane.stoppedReason) return [lane.stoppedReason];
   if (!configured) return ['device not found'];
   if (s.ok === 0) f.push('no successful request');
   if (s.mismatches) f.push(`${s.mismatches} changed answers`);
@@ -650,6 +863,9 @@ function judge(lane: Lane, configured: boolean): string[] {
   if (s.burstBad) f.push(`${s.burstBad} failed bursts`);
   if (s.deviceMismatch) f.push(`${s.deviceMismatch} device counter differences`);
   if (s.reboots) f.push(`${s.reboots} unexpected reboots`);
+  if (s.recoveryFailed) f.push(`${s.recoveryFailed} restarts without recovery`);
+  if (s.unplanned) f.push(`${s.unplanned} unplanned device restarts`);
+  if (s.dropped) f.push(`device could not send ${s.dropped} bytes`);
   if (s.unexpected) f.push(`${s.unexpected} unexpected lines/bytes`);
   const fault = lane.config.faultEvery ?? 0;
   if (!fault && s.nmeaBad) f.push(`${s.nmeaBad} NMEA checksum errors`);
@@ -753,7 +969,7 @@ export function writeReport(report: SoakReport, dir: string): string {
   const last = report.memory[report.memory.length - 1];
   const rows = report.lanes.map((l) => {
     const s = l.stats;
-    return `| ${l.name} | ${l.role} | ${s.requests} | ${s.ok} | ${s.timeouts} | ${s.mismatches} | ${s.streamLines} | ${s.streamGaps} | ${s.bursts} | ${s.reconnects} | ${(s.downtimeMs / 1000).toFixed(1)} s | ${l.latency.p50} / ${l.latency.p95} / ${l.latency.p99} / ${l.latency.max} | ${l.failures.length ? `❌ ${l.failures.join('; ')}` : '✅'} |`;
+    return `| ${l.name} | ${l.role} | ${s.requests} | ${s.ok} | ${s.timeouts} | ${s.mismatches} | ${s.streamLines} | ${s.streamGaps} | ${s.bursts} | ${s.resets} / ${s.reopens} / ${s.lineResets} / ${s.unplanned} | ${s.reconnects} | ${(s.downtimeMs / 1000).toFixed(1)} s | ${l.latency.p50} / ${l.latency.p95} / ${l.latency.p99} / ${l.latency.max} | ${l.failures.length ? `❌ ${l.failures.join('; ')}` : '✅'} |`;
   });
   const md = [
     `# Long-run test – ${report.verdict === 'PASS' ? '✅ PASS' : '❌ FAIL'}`,
@@ -763,8 +979,8 @@ export function writeReport(report: SoakReport, dir: string): string {
       ? `Memory of the test process: RSS ${mb(first.rss)} → ${mb(last.rss)} MB, heap ${mb(first.heapUsed)} → ${mb(last.heapUsed)} MB.`
       : '',
     '',
-    '| Lane | Role | Requests | OK | Timeouts | Changed | Stream lines | Stream gaps | Bursts | Reconnects | Down | Latency p50/p95/p99/max ms | Result |',
-    '| --- | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --- | --- |',
+    '| Lane | Role | Requests | OK | Timeouts | Changed | Stream lines | Stream gaps | Bursts | Restarts: RESET / reopen / line / unplanned | Reconnects | Down | Latency p50/p95/p99/max ms | Result |',
+    '| --- | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: | --- | --- |',
     ...rows,
     '',
     ...report.lanes.flatMap((l) => [

@@ -1033,8 +1033,10 @@ These tests only ever touch the port you name – nothing is sent to other conne
 ### Long-run test with real boards
 
 Arduino Uno, Mega 2560, Nano ESP32 and ESP32 boards run a test firmware (protocol SMP-TD/1) that
-checks every frame itself; an adapter with bridged RX/TX serves as a loopback. One command asks for
-the duration and whether the test runs in the terminal (serial layer) or through the user interface:
+checks every frame itself; an adapter with bridged RX/TX serves as a loopback. The test restarts the
+boards by itself (firmware reset, reopening the port, DTR/RTS reset), so it runs for days without
+anyone at the USB hub. One command asks for the duration and whether the test runs in the terminal
+(serial layer) or through the user interface:
 
 ```bash
 npm run firmware -- flash all   # once: flash the boards (see hardware/README.md)

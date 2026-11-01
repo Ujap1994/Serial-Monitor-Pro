@@ -24,7 +24,7 @@ function config(): SoakConfig {
       ],
     };
   }
-  const file = join(root, 'hardware', 'devices.local.json');
+  const file = process.env.SMP_SOAK_CONFIG ?? join(root, 'hardware', 'devices.local.json');
   if (!existsSync(file)) throw new Error(`${file} is missing – see hardware/README.md`);
   const local = JSON.parse(readFileSync(file, 'utf8')) as {
     devices: (LaneConfig & { fqbn?: string })[];

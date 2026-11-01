@@ -6,6 +6,40 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.3.1] – 2026-11-01
+
+### Added
+
+- **Unattended long runs**: the long-run test restarts the boards by itself – firmware `RESET`,
+  closing and reopening the port, and a DTR or RTS hardware reset – each as often as set per device
+  (`resetEveryMin`, `reopenEveryMin`, `lineReset` + `lineResetEveryMin`). Nobody has to be at the
+  hub switches during a run of hours or days.
+- The report counts restarts by kind (RESET / reopen / line / unplanned) and reports every restart
+  nobody asked for, with the reason the board gives (`boot=watchdog`, `usb-stall` …). A restart
+  after a lost connection from power (hub switch) is noted, not counted as a failure.
+- A loopback adapter must return a short probe before it gets any test data; otherwise nothing more
+  is sent to that port.
+- Test firmware 1.1: ESP32 boards report why they started (`boot=` in `ID?` and `READY`) and restart
+  by themselves when the firmware loop hangs (task watchdog). The Nano ESP32 never blocks on its USB
+  port: output the host does not take is dropped and counted (`dropped=` in `STAT?`, reported by the
+  test), and a USB port that takes nothing for 10 s restarts the board. Output is sent in whole lines.
+- The simulated test device restarts on a DTR pulse and on RTS-low like the real boards.
+
+### Changed
+
+- The Nano ESP32 firmware is built with the Espressif core (`esp32:esp32:nano_nora`). With the
+  Arduino core 2.0.x its USB stack stopped sending after a reset or a reopen of the port.
+- After a lost connection the test retries less and less often (1 s up to 30 s) while a device does
+  not answer.
+
+### Tests
+
+- Unit tests for unattended restarts (RESET, reopen, DTR and RTS resets against the simulator), the
+  loopback probe and the restart classification.
+- Measured on the boards: 8 minutes with Uno, Mega, Nano ESP32, ESP32-WROOM and an RS232 adapter
+  with bridged RX/TX, a restart of every kind every 1–2 minutes – about 14 000 requests per board and
+  11 700 loopback blocks, no timeout, no changed answer, no unplanned restart.
+
 ## [1.3.0] – 2026-11-01
 
 ### Added

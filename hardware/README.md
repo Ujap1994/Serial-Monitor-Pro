@@ -9,9 +9,15 @@ described in [docs/LONG_RUN_TEST.md](../docs/LONG_RUN_TEST.md); this page is abo
 | ----------------------- | ------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Arduino Uno R3          | 2341:0043           | `arduino:avr:uno`                 | Restarts when the port is opened (DTR). 64-byte receive buffer – keep `maxPayload` at 32.        |
 | Arduino Mega 2560 R3    | 2341:0042           | `arduino:avr:mega:cpu=atmega2560` | Like the Uno.                                                                                    |
-| Arduino Nano ESP32      | 2341:0070           | `arduino:esp32:nano_nora`         | Native USB: `RESET` makes the port disappear and come back – a real reconnect test.              |
+| Arduino Nano ESP32      | 2341:0070           | `esp32:esp32:nano_nora`           | Native USB: `RESET` makes the port disappear and come back – a real reconnect test. See below.   |
 | ESP32-WROOM-32 (CP2102) | 10c4:ea60           | `esp32:esp32:esp32`               | The CP2102 reports the serial number `0001`, which other CP2102 devices share – see below.       |
 | USB-RS232/485 adapter   | depends on the chip | –                                 | Not flashed: bridge RX and TX (RS232: pins 2 and 3 of the DB9) and use it with `role: loopback`. |
+
+**Nano ESP32: use the Espressif core.** Build it with `esp32:esp32:nano_nora` (core 3.x), not with
+the Arduino core `arduino:esp32:nano_nora` (2.0.x). With the older core the board's USB stack
+stopped sending after a `RESET` or a reopen of the port; only a power cycle brought it back. With
+the Espressif core the same stress test (a `RESET` every minute, a reopen every 90 s) ran without a
+single failure. Uploads go through DFU either way.
 
 All boards run the same sketch, [smp-testdevice](smp-testdevice/smp-testdevice.ino), at 115200 baud
 8N1. It implements protocol SMP-TD/1 exactly like the reference in
@@ -30,7 +36,7 @@ device `sim:testdevice`.
 4. Install [arduino-cli](https://arduino.github.io/arduino-cli/) and the cores:
 
    ```bash
-   arduino-cli core install arduino:avr arduino:esp32
+   arduino-cli core install arduino:avr
    arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
    arduino-cli core update-index && arduino-cli core install esp32:esp32
    ```
@@ -77,7 +83,22 @@ device `sim:testdevice`.
       "nmeaMs": 500,
       "faultEvery": 10,
       "gapMs": 20,
-      "resetEveryMin": 1
+      "resetEveryMin": 10,
+      "reopenEveryMin": 15,
+      "lineReset": "dtr",
+      "lineResetEveryMin": 20
+    },
+    {
+      "name": "nano-esp32",
+      "role": "testdevice",
+      "serialNumber": "3C8427C2E3F4",
+      "vendorId": "2341",
+      "productId": "0070",
+      "fqbn": "esp32:esp32:nano_nora",
+      "baudRate": 115200,
+      "maxPayload": 60,
+      "resetEveryMin": 10,
+      "reopenEveryMin": 15
     },
     {
       "name": "esp32-wroom",
@@ -87,13 +108,20 @@ device `sim:testdevice`.
       "productId": "ea60",
       "fqbn": "esp32:esp32:esp32",
       "baudRate": 115200,
-      "maxPayload": 60
+      "maxPayload": 60,
+      "resetEveryMin": 10,
+      "reopenEveryMin": 15,
+      "lineReset": "rts",
+      "lineResetEveryMin": 20
     },
     {
       "name": "rs232",
       "role": "loopback",
       "serialNumber": "<serial number of the adapter>",
-      "baudRate": 115200
+      "vendorId": "0403",
+      "productId": "6001",
+      "baudRate": 115200,
+      "maxPayload": 48
     }
   ],
   "never": ["<serial number of a device that must never be opened>"]
@@ -112,28 +140,53 @@ device `sim:testdevice`.
 | `faultEvery`            | Every n-th NMEA sentence gets a wrong checksum on purpose; the test checks it is reported (0 = off).  |
 | `gapMs`                 | Pause between two requests – keeps the load moderate.                                                 |
 | `resetEveryMin`         | Send `RESET` every n minutes (0 = never).                                                             |
+| `reopenEveryMin`        | Close and reopen the port every n minutes (0 = never). Uno and Mega restart on open.                  |
+| `lineReset`             | Hardware reset through a control line: `dtr` (Uno, Mega) or `rts` (ESP32 boards with auto-reset).     |
+| `lineResetEveryMin`     | How often the `lineReset` is done (0 = never). Not for the Nano ESP32 (native USB, no reset circuit). |
 | `dtr`, `rts`            | Control lines after opening (default on). Some ESP32 boards need both off to avoid the download mode. |
 
 Only devices on this list are ever opened or flashed, and nothing whose serial number is on the
 `never` list – even if it is listed. When several connected ports match an entry, the tools refuse
-to guess.
+to guess. A `loopback` entry first gets a short probe; if it does not come back unchanged, nothing
+more is sent to that port.
+
+An adapter that is sometimes used with real equipment keeps its serial number: put it back on the
+`never` list (or remove its entry) before connecting that equipment again.
 
 ## Protocol SMP-TD/1 (summary)
 
 Text commands end with LF. Binary frames: `AA 55 <len 0…64> <payload> <CRC-16/MODBUS over len and
 payload, little-endian>` → `ACK <crc>` or `NAK <expected> <received>`.
 
-| Command       | Answer                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `PING <n>`    | `PONG <n>`                                                                                 |
-| `ECHO <text>` | `ECHO <text>` (byte for byte)                                                              |
-| `ID?`         | `ID SMP-TD/1 board=<board> fw=<version> uptime=<ms>`                                       |
-| `STAT?`       | Counters: received/sent bytes, lines, frames, CRC errors, streamed items, faults, free RAM |
-| `CLEAR`       | `OK CLEAR` – counters to zero                                                              |
-| `STREAM <ms>` | `Temp:…, Humidity:…, Pressure:…, Seq:<n>` every _ms_ (0 = off)                             |
-| `NMEA <ms>`   | `$GPGGA` with the sequence number as time                                                  |
-| `MODBUS <ms>` | Modbus RTU responses `01 03 04 <seq> <value> CRC`                                          |
-| `FAULT <n>`   | Every n-th NMEA/Modbus item with a wrong checksum                                          |
-| `BURST <n>`   | `BURST <n>`, n bytes `0, 1, 2 …`, `BURSTEND <crc>`                                         |
-| `AUTO <ms>`   | Stored permanently: the sensor stream starts after every boot (used by the GUI test)       |
-| `RESET`       | `OK RESET`, restart, `READY …`                                                             |
+| Command       | Answer                                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| `PING <n>`    | `PONG <n>`                                                                                                 |
+| `ECHO <text>` | `ECHO <text>` (byte for byte)                                                                              |
+| `ID?`         | `ID SMP-TD/1 board=<board> fw=<version> uptime=<ms>`, ESP32 boards add `boot=<reason>`                     |
+| `STAT?`       | Counters: received/sent bytes, lines, frames, CRC errors, streamed items, faults, dropped output, free RAM |
+| `CLEAR`       | `OK CLEAR` – counters to zero                                                                              |
+| `STREAM <ms>` | `Temp:…, Humidity:…, Pressure:…, Seq:<n>` every _ms_ (0 = off)                                             |
+| `NMEA <ms>`   | `$GPGGA` with the sequence number as time                                                                  |
+| `MODBUS <ms>` | Modbus RTU responses `01 03 04 <seq> <value> CRC`                                                          |
+| `FAULT <n>`   | Every n-th NMEA/Modbus item with a wrong checksum                                                          |
+| `BURST <n>`   | `BURST <n>`, n bytes `0, 1, 2 …`, `BURSTEND <crc>`                                                         |
+| `AUTO <ms>`   | Stored permanently: the sensor stream starts after every boot (used by the GUI test)                       |
+| `RESET`       | `OK RESET`, restart, `READY …`                                                                             |
+
+`boot=` tells why an ESP32 board started: `power`, `pin` (EN/RESET), `reset` (the `RESET` command),
+`watchdog`, `panic`, `usb-stall`, `brownout`, `software` (e.g. after an upload) or `other`.
+
+## Self-recovery (ESP32 boards)
+
+Nobody has to be at the hub during a long run:
+
+- **Task watchdog:** if the firmware loop hangs for 5 s, the board restarts (`boot=watchdog`).
+- **Never blocking on native USB (Nano ESP32):** output the host does not take within 100 ms is
+  dropped and counted (`dropped=` in `STAT?`) instead of waiting forever. The long-run test reports
+  any dropped byte – it means the port was not read.
+- **USB stall (Nano ESP32):** if the port takes nothing for 10 s while the host holds it open, the
+  board restarts (`boot=usb-stall`).
+- DTR/RTS sequences and 1200 baud no longer send the Nano ESP32 into its ROM bootloader, so a test
+  that toggles the lines cannot stop the firmware. Uploads use DFU and are not affected.
+
+Every such restart appears in the report as an **unplanned** restart with its reason.
