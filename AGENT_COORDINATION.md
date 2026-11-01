@@ -126,3 +126,11 @@ Measured: Nano ESP32 alone, RESET every minute + reopen every 90 s for 6 min –
 failed the same test). All five lanes for 8 min with a restart of every kind every 1–2 min –
 passed (≈14 000 requests per board, 11 692 loopback blocks, 0 timeouts, 0 changed answers,
 0 unplanned restarts).
+
+Published 1.3.1: `npm run check` passed locally (1157 unit/integration tests, 60 Electron tests).
+CI on `main` (`78604a1`) passed on Linux, Windows and macOS –
+https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41321921809. Release workflow passed –
+https://github.com/Ujap1994/Serial-Monitor-Pro/actions/runs/41322572765. Release with 24 packages and
+SHA256SUMS: https://github.com/Ujap1994/Serial-Monitor-Pro/releases/tag/v1.3.1. Not rerun with
+firmware 1.1: the GUI long-run test on the boards (unchanged code path; the terminal run covered the
+firmware). Open: overnight/weekend runs by the owner.
