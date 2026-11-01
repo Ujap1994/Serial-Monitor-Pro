@@ -119,7 +119,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: Set up LXD for isolated Snapcraft builds
-        uses: canonical/setup-lxd@v0.1.3
+        uses: canonical/setup-lxd@v1
         with:
           channel: 5.21/stable
       - name: Install Snapcraft
