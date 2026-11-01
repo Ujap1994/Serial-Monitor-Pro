@@ -16,8 +16,8 @@ for (const [width, height, scrolls] of [
 ] as const) {
   test(`tool outputs keep a usable height at ${width}×${height}`, async ({ app, page }) => {
     await app.evaluate(
-      ({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0]?.setContentSize(w, h),
-      [width, height],
+      ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0]?.setContentSize(size.w, size.h),
+      { w: width, h: height },
     );
     await page.waitForTimeout(300);
     for (const [tab, output] of OUTPUTS) {
