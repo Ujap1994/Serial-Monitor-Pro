@@ -1,3 +1,4 @@
+/* global innerWidth, innerHeight -- evaluated in the page */
 // Layout regression: in small windows the settings of a tool must not squeeze
 // its output to nothing – the page scrolls instead.
 import { expect, test } from './fixtures';
@@ -20,11 +21,17 @@ for (const [width, height, scrolls] of [
       { w: width, h: height },
     );
     await page.waitForTimeout(300);
+    // The operating system may keep the window smaller than requested (a CI
+    // runner with a small screen); "fits" is only checked at the full size.
+    const actual = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }));
+    const fullSize = actual.w >= width - 2 && actual.h >= height - 2;
+    if (!fullSize)
+      test.info().annotations.push({ type: 'window', description: JSON.stringify(actual) });
     for (const [tab, output] of OUTPUTS) {
       await page.getByTestId(`tab-${tab}`).click();
       const box = await page.getByTestId(output).boundingBox();
       expect(box?.height ?? 0, `${tab} output height`).toBeGreaterThan(120);
-      if (!scrolls) {
+      if (!scrolls && fullSize) {
         const overflow = await page
           .getByTestId(`page-${tab}`)
           .evaluate((el) => el.scrollHeight > el.clientHeight + 1);
