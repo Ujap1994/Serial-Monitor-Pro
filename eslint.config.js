@@ -64,6 +64,15 @@ export default tseslint.config(
     rules: { 'no-console': 'off' },
   },
   {
+    // Plain browser script of the project website (site/), not type-checked.
+    files: ['site/**/*.js'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      globals: globals.browser,
+    },
+  },
+  {
     files: ['tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',

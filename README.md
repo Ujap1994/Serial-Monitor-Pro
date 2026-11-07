@@ -18,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://ujap1994.github.io/Serial-Monitor-Pro/"><b>Website</b></a> ·
   <a href="#%EF%B8%8F-disclaimer">Disclaimer</a> ·
   <a href="#-features">Features</a> ·
   <a href="#-installation">Installation</a> ·
@@ -1161,6 +1162,22 @@ Releases are built by GitHub Actions: pushing a tag `vX.Y.Z` builds all packages
 tests the packaged application on Linux, Windows and macOS and publishes the release.
 _Actions → Release → Run workflow_ builds everything as downloadable artifacts without publishing.
 
+### Project website
+
+The website at <https://ujap1994.github.io/Serial-Monitor-Pro/> is a static page in `site/` (English and
+German, light and dark theme, no external fonts or trackers). It uses the screenshots from
+`docs/images` and the logo from `assets/brand` directly, and its download buttons link to the files of
+the latest release, which the page reads from GitHub when it is opened – a new release needs no new
+deployment.
+
+```bash
+npm run site           # build into dist/site
+npm run site:preview   # build and serve on http://localhost:4173
+```
+
+The _Website_ workflow builds the page for pull requests and publishes it with GitHub Pages from
+`main`. One-time setup: _Settings → Pages → Build and deployment → Source: GitHub Actions_.
+
 ### Project layout
 
 ```text
@@ -1172,7 +1189,8 @@ src/
 tests/
   unit/        Vitest – core logic, serial manager, simulated and virtual ports
   e2e/         Playwright – the real application, end to end
-scripts/       check, icons, screenshots, hardware test, release notes
+scripts/       check, icons, screenshots, hardware test, release notes, website build
+site/          project website (GitHub Pages)
 assets/brand/  logo (vector) and social preview
 build/         generated icons for the installers
 docs/images/   pictures of this README (generated)
