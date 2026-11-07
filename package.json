@@ -59,6 +59,8 @@
     "check:watch": "concurrently -k -n types,unit -c blue,green \"tsc -p tsconfig.web.json --noEmit --watch --preserveWatchOutput\" \"vitest\"",
     "icons": "node scripts/generate-icons.mjs",
     "docs:screenshots": "npm run build && node scripts/screenshots.mjs",
+    "site": "node scripts/build-site.mjs",
+    "site:preview": "node scripts/build-site.mjs --serve",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
